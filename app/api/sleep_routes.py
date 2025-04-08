@@ -25,14 +25,30 @@ from app.models.sleep_models import (
 )
 from app.services.extern.apple_health import AppleHealthImporter
 from app.services.sleep_service import SleepDataService
-from app.services.storage.db_storage import DatabaseStorage
+from app.services.storage.factory import StorageFactory
 
 router = APIRouter(prefix="/sleep", tags=["sleep"])
 
 
 # Service dependencies
 def get_storage_service():
-    return DatabaseStorage()
+    """
+    Get the appropriate storage service based on environment.
+
+    For testing, uses in-memory SQLite.
+    For production, uses PostgreSQL.
+    """
+    # Import here to avoid circular imports
+
+    from app.config.settings import settings
+
+    # Check if we're in a testing environment
+    if settings.DATABASE_URL.startswith("sqlite"):
+        # We're using SQLite - likely a test environment
+        return StorageFactory.create_storage_service("memory")
+    else:
+        # We're in production
+        return StorageFactory.create_storage_service("database")
 
 
 def get_sleep_service(storage_service=Depends(get_storage_service)):

@@ -1,16 +1,31 @@
 import os
+import shutil
 import sys
-from unittest.mock import MagicMock
+import tempfile
+from unittest.mock import MagicMock, patch
 
 import pytest
 from fastapi.testclient import TestClient
-
-from app.main import app
 
 # ruff: noqa: E501
 
 # Add the application to the python path
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
+
+# Patch database URL to use SQLite before importing app
+with patch("app.config.settings.settings.DATABASE_URL", "sqlite:///:memory:"):
+    from app.main import app
+    from app.services.storage.factory import StorageFactory
+
+# Apply SQLite patching for all tests in this module
+pytestmark = [pytest.mark.usefixtures("use_sqlite_db")]
+
+
+@pytest.fixture(scope="session", autouse=True)
+def use_sqlite_db():
+    """Use SQLite for all database operations."""
+    with patch("app.config.settings.settings.DATABASE_URL", "sqlite:///:memory:"):
+        yield
 
 
 @pytest.fixture
@@ -28,6 +43,30 @@ def mock_storage():
     storage.save_sleep_records.return_value = True
     storage.delete_sleep_record.return_value = True
     return storage
+
+
+@pytest.fixture
+def memory_db_storage():
+    """Create an in-memory database storage for testing."""
+    # Use our factory to create an in-memory database
+    return StorageFactory.create_storage_service("memory")
+
+
+@pytest.fixture
+def file_storage():
+    """Create a temporary file storage for testing."""
+    # Create a temporary directory for test data
+    temp_dir = tempfile.mkdtemp()
+
+    # Use our factory to create file storage with the temp directory
+    from app.services.storage.file_storage import FileStorage
+
+    storage = FileStorage(data_dir=temp_dir)
+
+    yield storage
+
+    # Clean up the temporary directory after the test
+    shutil.rmtree(temp_dir)
 
 
 @pytest.fixture

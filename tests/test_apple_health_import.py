@@ -1,5 +1,6 @@
 import os
 import sys
+import xml.etree.ElementTree as ET
 from datetime import datetime
 from unittest.mock import MagicMock
 
@@ -55,8 +56,6 @@ class TestAppleHealthImporter:
 
     def test_extract_sleep_records(self):
         """Test extracting sleep records from XML."""
-        import xml.etree.ElementTree as ET
-
         root = ET.fromstring(self.sample_xml)
 
         sleep_records = self.importer._extract_sleep_records(root, self.user_id)
@@ -81,8 +80,6 @@ class TestAppleHealthImporter:
 
     def test_extract_heart_rate_data(self):
         """Test extracting heart rate data from XML."""
-        import xml.etree.ElementTree as ET
-
         root = ET.fromstring(self.sample_xml)
 
         heart_rate_data = self.importer._extract_heart_rate_data(root)

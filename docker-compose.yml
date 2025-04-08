@@ -1,0 +1,57 @@
+services:
+  sleep-service:
+    build: .
+    ports:
+      - "8001:8001"
+    environment:
+      - API_HOST=0.0.0.0
+      - API_PORT=8001
+      - DATABASE_URL=postgresql://postgres:postgres@postgres:5432/sleep_data
+      - LOG_LEVEL=INFO
+      - DEBUG=False
+    restart: unless-stopped
+    depends_on:
+      - postgres
+    networks:
+      - microservice-network
+
+  postgres:
+    image: postgres:14
+    ports:
+      - "5432:5432"
+    environment:
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres
+      - POSTGRES_DB=sleep_data
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - microservice-network
+
+  # Optional: Include pgAdmin for database management
+  pgadmin:
+    image: dpage/pgadmin4
+    ports:
+      - "5050:80"
+    environment:
+      - PGADMIN_DEFAULT_EMAIL=admin@sleepdata.com
+      - PGADMIN_DEFAULT_PASSWORD=admin
+    volumes:
+      - pgadmin-data:/var/lib/pgadmin
+    depends_on:
+      - postgres
+    networks:
+      - microservice-network
+
+networks:
+  microservice-network:
+    driver: bridge
+
+volumes:
+  postgres-data:
+  pgadmin-data:

@@ -1,21 +1,31 @@
-import json
-from datetime import datetime, timedelta
-from typing import Dict, List, Optional, Any
 import uuid
-from sqlalchemy import create_engine, Column, String, Integer, Float, DateTime, JSON, ForeignKey, Boolean
-from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy.orm import sessionmaker, relationship
+from datetime import datetime
+from typing import Dict, List, Optional
+
 from loguru import logger
+from sqlalchemy import (
+    JSON,
+    Column,
+    DateTime,
+    Float,
+    ForeignKey,
+    Integer,
+    String,
+    create_engine,
+)
+from sqlalchemy.ext.declarative import declarative_base
+from sqlalchemy.orm import sessionmaker
 
 from app.config.settings import settings
 
 Base = declarative_base()
 
-class SleepRecord(Base):
+
+class SleepRecord(Base):  # type: ignore
     """SQLAlchemy model for sleep records."""
-    
+
     __tablename__ = "sleep_records"
-    
+
     id = Column(String, primary_key=True)
     user_id = Column(String, index=True, nullable=False)
     date = Column(String, index=True, nullable=False)
@@ -32,7 +42,7 @@ class SleepRecord(Base):
     metadata = Column(JSON, nullable=False)
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
-    
+
     def to_dict(self) -> Dict:
         """Convert the record to a dictionary."""
         return {
@@ -49,23 +59,25 @@ class SleepRecord(Base):
             "environment": self.environment,
             "tags": self.tags,
             "notes": self.notes,
-            "metadata": self.metadata
+            "metadata": self.metadata,
         }
 
 
-class SleepTimeSeriesPoint(Base):
+class SleepTimeSeriesPoint(Base):  # type: ignore
     """SQLAlchemy model for sleep time series data points."""
-    
+
     __tablename__ = "sleep_time_series"
-    
+
     id = Column(String, primary_key=True)
-    sleep_record_id = Column(String, ForeignKey("sleep_records.id", ondelete="CASCADE"), index=True)
+    sleep_record_id = Column(
+        String, ForeignKey("sleep_records.id", ondelete="CASCADE"), index=True
+    )
     timestamp = Column(DateTime, nullable=False)
     stage = Column(String, nullable=True)
     heart_rate = Column(Float, nullable=True)
     movement = Column(Float, nullable=True)
     respiration_rate = Column(Float, nullable=True)
-    
+
     def to_dict(self) -> Dict:
         """Convert the time series point to a dictionary."""
         return {
@@ -73,30 +85,41 @@ class SleepTimeSeriesPoint(Base):
             "stage": self.stage,
             "heart_rate": self.heart_rate,
             "movement": self.movement,
-            "respiration_rate": self.respiration_rate
+            "respiration_rate": self.respiration_rate,
         }
 
 
 class DatabaseStorage:
-    """Database storage service for sleep data."""
-    
-    def __init__(self, db_url: str = None):
+    """PostgreSQL database storage service for sleep data."""
+
+    def __init__(self):
         """Initialize the database storage service."""
-        self.db_url = db_url or settings.DATABASE_URL
+        self.db_url = settings.DATABASE_URL
+
+        # Ensure we're using PostgreSQL
+        if not self.db_url.startswith("postgresql"):
+            raise ValueError(
+                "PostgreSQL connection string required. Format: postgresql://user:password@host:port/dbname"
+            )
+
         self.engine = create_engine(self.db_url)
         self.Session = sessionmaker(bind=self.engine)
-        
+
         # Create tables if they don't exist
         Base.metadata.create_all(self.engine)
-    
+
     def save_sleep_records(self, user_id: str, records: List[Dict]) -> bool:
         """Save sleep records to the database."""
         session = self.Session()
         try:
             for record in records:
                 # Check if record already exists
-                existing = session.query(SleepRecord).filter(SleepRecord.id == record.get("id")).first()
-                
+                existing = (
+                    session.query(SleepRecord)
+                    .filter(SleepRecord.id == record.get("id"))
+                    .first()
+                )
+
                 if existing:
                     # Update existing record
                     for key, value in record.items():
@@ -106,23 +129,32 @@ class DatabaseStorage:
                     # Create new record
                     if "id" not in record:
                         record["id"] = str(uuid.uuid4())
-                    
+
                     # Extract time series data
                     time_series = record.pop("time_series", [])
-                    
+
                     # Convert datetime strings to datetime objects
-                    record["sleep_start"] = datetime.fromisoformat(record["sleep_start"])
-                    record["sleep_end"] = datetime.fromisoformat(record["sleep_end"])
-                    
+                    if isinstance(record["sleep_start"], str):
+                        record["sleep_start"] = datetime.fromisoformat(
+                            record["sleep_start"]
+                        )
+                    if isinstance(record["sleep_end"], str):
+                        record["sleep_end"] = datetime.fromisoformat(
+                            record["sleep_end"]
+                        )
+
                     # Create record
                     sleep_record = SleepRecord(**record)
                     session.add(sleep_record)
-                    
+
                     # Add time series data
                     for ts_point in time_series:
                         ts_point_id = str(uuid.uuid4())
-                        timestamp = datetime.fromisoformat(ts_point["timestamp"])
-                        
+                        if isinstance(ts_point["timestamp"], str):
+                            timestamp = datetime.fromisoformat(ts_point["timestamp"])
+                        else:
+                            timestamp = ts_point["timestamp"]
+
                         time_series_record = SleepTimeSeriesPoint(
                             id=ts_point_id,
                             sleep_record_id=record["id"],
@@ -130,93 +162,98 @@ class DatabaseStorage:
                             stage=ts_point.get("stage"),
                             heart_rate=ts_point.get("heart_rate"),
                             movement=ts_point.get("movement"),
-                            respiration_rate=ts_point.get("respiration_rate")
+                            respiration_rate=ts_point.get("respiration_rate"),
                         )
                         session.add(time_series_record)
-            
+
             session.commit()
             return True
-        
+
         except Exception as e:
             session.rollback()
             logger.error(f"Error saving sleep records to database: {e}")
             return False
-        
+
         finally:
             session.close()
-    
+
     def get_sleep_records(
-        self, 
-        user_id: str, 
+        self,
+        user_id: str,
         start_date: Optional[datetime] = None,
         end_date: Optional[datetime] = None,
         limit: int = 100,
-        offset: int = 0
+        offset: int = 0,
     ) -> List[Dict]:
         """Get sleep records from the database."""
         session = self.Session()
         try:
             query = session.query(SleepRecord).filter(SleepRecord.user_id == user_id)
-            
+
             if start_date:
-                query = query.filter(SleepRecord.date >= start_date.strftime("%Y-%m-%d"))
-            
+                query = query.filter(
+                    SleepRecord.date >= start_date.strftime("%Y-%m-%d")
+                )
+
             if end_date:
                 query = query.filter(SleepRecord.date <= end_date.strftime("%Y-%m-%d"))
-            
+
             # Sort by date (newest first)
             query = query.order_by(SleepRecord.date.desc())
-            
+
             # Apply pagination
             records = query.limit(limit).offset(offset).all()
-            
+
             # Convert to dictionaries
             result = []
             for record in records:
                 record_dict = record.to_dict()
-                
+
                 # Get time series data
-                time_series_query = session.query(SleepTimeSeriesPoint).filter(
-                    SleepTimeSeriesPoint.sleep_record_id == record.id
-                ).order_by(SleepTimeSeriesPoint.timestamp)
-                
+                time_series_query = (
+                    session.query(SleepTimeSeriesPoint)
+                    .filter(SleepTimeSeriesPoint.sleep_record_id == record.id)
+                    .order_by(SleepTimeSeriesPoint.timestamp)
+                )
+
                 time_series = [ts.to_dict() for ts in time_series_query.all()]
                 record_dict["time_series"] = time_series
-                
+
                 result.append(record_dict)
-            
+
             return result
-        
+
         except Exception as e:
             logger.error(f"Error getting sleep records from database: {e}")
             return []
-        
+
         finally:
             session.close()
-    
+
     def delete_sleep_record(self, user_id: str, record_id: str) -> bool:
         """Delete a sleep record from the database."""
         session = self.Session()
         try:
             # First check if the record exists and belongs to the user
-            record = session.query(SleepRecord).filter(
-                SleepRecord.id == record_id,
-                SleepRecord.user_id == user_id
-            ).first()
-            
+            record = (
+                session.query(SleepRecord)
+                .filter(SleepRecord.id == record_id, SleepRecord.user_id == user_id)
+                .first()
+            )
+
             if not record:
                 return False
-            
+
             # Delete the record (cascade will handle time series data)
             session.delete(record)
             session.commit()
-            
+
             return True
-        
+
         except Exception as e:
             session.rollback()
             logger.error(f"Error deleting sleep record from database: {e}")
             return False
-        
+
         finally:
             session.close()

@@ -1,23 +1,27 @@
-import sys
 import os
+import sys
 from datetime import datetime
+from unittest.mock import MagicMock
+
 import pytest
-from unittest.mock import MagicMock, patch
+
+from app.services.extern.apple_health import AppleHealthImporter
+
+# ruff: noqa: E501
 
 # Add the application to the python path
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
-from app.services.import.apple_health import AppleHealthImporter
 
 class TestAppleHealthImporter:
     """Tests for the AppleHealthImporter class."""
-    
+
     def setup_method(self):
         """Set up test fixtures."""
         self.mock_storage = MagicMock()
         self.importer = AppleHealthImporter(storage_service=self.mock_storage)
         self.user_id = "test_user"
-        
+
         # Sample Apple Health XML data
         self.sample_xml = """
         <?xml version="1.0" encoding="UTF-8"?>
@@ -33,11 +37,11 @@ class TestAppleHealthImporter:
             <Record type="HKQuantityTypeIdentifierEnvironmentalAudioExposure" sourceName="Apple Watch" sourceVersion="1" device="AppleWatch" unit="dBASPL" value="35.5" startDate="2023-05-02 00:30:00 -0700" endDate="2023-05-02 00:30:00 -0700"/>
         </HealthData>
         """
-    
+
     def test_import_from_xml(self):
         """Test importing sleep data from Apple Health XML."""
         result = self.importer.import_from_xml(self.user_id, self.sample_xml)
-        
+
         # Verify basic result structure
         assert "user_id" in result
         assert result["user_id"] == self.user_id
@@ -45,19 +49,20 @@ class TestAppleHealthImporter:
         assert result["records_imported"] > 0
         assert "heart_rate_data_points" in result
         assert result["heart_rate_data_points"] > 0
-        
+
         # Verify storage was called
         self.mock_storage.save_sleep_records.assert_called_once()
-    
+
     def test_extract_sleep_records(self):
         """Test extracting sleep records from XML."""
         import xml.etree.ElementTree as ET
+
         root = ET.fromstring(self.sample_xml)
-        
+
         sleep_records = self.importer._extract_sleep_records(root, self.user_id)
-        
+
         assert len(sleep_records) == 2  # Two sleep records in the sample data
-        
+
         # Check first record
         record = sleep_records[0]
         assert record["user_id"] == self.user_id
@@ -68,28 +73,29 @@ class TestAppleHealthImporter:
         assert "sleep_phases" in record
         assert "time_series" in record
         assert "metadata" in record
-        
+
         # Verify metadata
         assert record["metadata"]["source"] == "apple_health"
         assert "imported_at" in record["metadata"]
         assert "Sleep Cycle" in record["metadata"]["source_name"]
-    
+
     def test_extract_heart_rate_data(self):
         """Test extracting heart rate data from XML."""
         import xml.etree.ElementTree as ET
+
         root = ET.fromstring(self.sample_xml)
-        
+
         heart_rate_data = self.importer._extract_heart_rate_data(root)
-        
+
         assert len(heart_rate_data) == 3  # Three heart rate records in sample
-        
+
         # Check structure
         hr_record = heart_rate_data[0]
         assert "timestamp" in hr_record
         assert "value" in hr_record
         assert "source" in hr_record
         assert hr_record["source"] == "Apple Watch"
-    
+
     def test_enhance_with_heart_rate(self):
         """Test enhancing sleep records with heart rate data."""
         sleep_records = [
@@ -98,27 +104,35 @@ class TestAppleHealthImporter:
                 "sleep_end": "2023-05-02T06:45:23-07:00",
                 "time_series": [
                     {"timestamp": "2023-05-02T00:00:00-07:00"},
-                    {"timestamp": "2023-05-02T03:00:00-07:00"}
-                ]
+                    {"timestamp": "2023-05-02T03:00:00-07:00"},
+                ],
             }
         ]
-        
+
         heart_rate_data = [
-            {"timestamp": datetime.fromisoformat("2023-05-02T00:05:00-07:00"), "value": 60, "source": "Test"},
-            {"timestamp": datetime.fromisoformat("2023-05-02T03:05:00-07:00"), "value": 55, "source": "Test"}
+            {
+                "timestamp": datetime.fromisoformat("2023-05-02T00:05:00-07:00"),
+                "value": 60,
+                "source": "Test",
+            },
+            {
+                "timestamp": datetime.fromisoformat("2023-05-02T03:05:00-07:00"),
+                "value": 55,
+                "source": "Test",
+            },
         ]
-        
+
         self.importer._enhance_with_heart_rate(sleep_records, heart_rate_data)
-        
+
         # Verify heart rate data was added
         assert "heart_rate" in sleep_records[0]
         assert "average" in sleep_records[0]["heart_rate"]
         assert sleep_records[0]["heart_rate"]["average"] == 57.5  # Average of 60 and 55
-        
+
         # Verify time series was enhanced
         assert sleep_records[0]["time_series"][0]["heart_rate"] is not None
         assert sleep_records[0]["time_series"][1]["heart_rate"] is not None
-    
+
     def test_import_with_invalid_xml(self):
         """Test handling of invalid XML."""
         with pytest.raises(Exception):

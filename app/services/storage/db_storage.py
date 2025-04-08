@@ -154,7 +154,13 @@ class DatabaseStorage:
 
                     # Handle meta_data conversion
                     if "meta_data" in record:
-                        record["meta_data"] = record.pop("meta_data")
+                        meta_data = record.pop("meta_data")
+                        # Convert datetime objects in meta_data to ISO format strings
+                        if isinstance(meta_data, dict):
+                            for key, value in meta_data.items():
+                                if isinstance(value, datetime):
+                                    meta_data[key] = value.isoformat()
+                        record["meta_data"] = meta_data
 
                     # Convert datetime strings to datetime objects
                     if isinstance(record["sleep_start"], str):

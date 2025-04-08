@@ -123,6 +123,7 @@ def _complete_sleep_record(record: Dict[str, Any]) -> Dict[str, Any]:
 async def generate_sleep_data(
     request: GenerateSleepDataRequest,
     sleep_service: SleepDataService = Depends(get_sleep_service),
+    storage_service=Depends(get_storage_service),
 ):
     """Generate dummy sleep data for a specified date range."""
     try:
@@ -155,6 +156,15 @@ async def generate_sleep_data(
                         record.get("sleep_end", datetime.now()),
                         record.get("duration_minutes", 480),
                     )
+
+        # Save the generated data to the database
+        success = storage_service.save_sleep_records(request.user_id, sleep_data)
+        if not success:
+            logger.error("Failed to save generated sleep data to the database")
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Failed to save generated sleep data to the database",
+            )
 
         return {"records": sleep_data, "count": len(sleep_data)}
     except Exception as e:

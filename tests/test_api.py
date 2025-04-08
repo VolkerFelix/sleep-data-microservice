@@ -104,17 +104,29 @@ class TestAPI:
     def test_create_sleep_record(self):
         """Test creating a sleep record."""
         # Prepare a sleep record payload
+        current_time = datetime.now()
         payload = {
             "user_id": "create_test_user",
-            "date": datetime.now().strftime("%Y-%m-%d"),
-            "sleep_start": (datetime.now() - timedelta(hours=8)).isoformat(),
-            "sleep_end": datetime.now().isoformat(),
+            "date": current_time.strftime("%Y-%m-%d"),
+            "sleep_start": (current_time - timedelta(hours=8)).isoformat(),
+            "sleep_end": current_time.isoformat(),
             "duration_minutes": 480,
             "sleep_quality": 85,
+            "sleep_phases": None,
+            "heart_rate": None,
+            "breathing": None,
+            "environment": None,
+            "time_series": [],
+            "tags": None,
+            "notes": None,
             "meta_data": {
                 "source": "manual",
-                "generated_at": datetime.now().isoformat(),
+                "generated_at": current_time.isoformat(),
                 "source_name": "Test Client",
+                "device": None,
+                "version": None,
+                "imported_at": None,
+                "raw_data": None,
             },
         }
 
@@ -130,6 +142,10 @@ class TestAPI:
         assert record["user_id"] == payload["user_id"]
         assert record["sleep_quality"] == payload["sleep_quality"]
         assert record["meta_data"]["source"] == "manual"
+        assert record["meta_data"]["device"] is None
+        assert record["meta_data"]["version"] is None
+        assert record["meta_data"]["imported_at"] is None
+        assert record["meta_data"]["raw_data"] is None
 
     def test_get_sleep_data(self):
         """Test retrieving sleep data."""

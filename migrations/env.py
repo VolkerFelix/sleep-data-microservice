@@ -20,9 +20,9 @@ if config.config_file_name is not None:
 database_url = os.getenv("DATABASE_URL", settings.DATABASE_URL)
 config.set_main_option("sqlalchemy.url", database_url)
 
-# add your model's meta_data object here
+# add your model's metadata object here
 # for 'autogenerate' support
-target_meta_data = Base.meta_data
+target_meta_data = Base.metadata
 
 # other values from the config, defined by the needs of env.py,
 # can be acquired:

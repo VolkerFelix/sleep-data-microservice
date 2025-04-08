@@ -129,9 +129,16 @@ class SleepDataService:
         # If storage service is available, store the generated records
         if self.storage_service:
             try:
-                self.storage_service.save_sleep_records(user_id, sleep_data)
+                success = self.storage_service.save_sleep_records(user_id, sleep_data)
+                if not success:
+                    logger.error(
+                        """Failed to store generated sleep records:
+                        save operation returned False"""
+                    )
+                    raise Exception("Failed to store generated sleep records")
             except Exception as e:
                 logger.error(f"Failed to store generated sleep records: {str(e)}")
+                raise
 
         return sleep_data
 

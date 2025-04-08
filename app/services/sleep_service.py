@@ -1,3 +1,9 @@
+"""Service module for handling sleep data, including generation and analysis.
+
+This module provides functionality to generate dummy sleep data and retrieve
+sleep records from a storage service. It also includes methods for analyzing
+sleep data trends and consistency.
+"""
 import random
 import uuid
 from datetime import datetime, timedelta
@@ -12,7 +18,7 @@ class SleepDataService:
     """Service for handling sleep data, including generation and analysis."""
 
     def __init__(self, storage_service=None):
-        """Initialize the sleep data service with an optional storage service."""
+        """Initialize the sleep data service."""
         self.storage_service = storage_service
 
     # In app/services/sleep_service.py, update the generate_dummy_data method:
@@ -372,9 +378,9 @@ class SleepDataService:
                 "average_sleep_quality": round(avg_quality, 1) if avg_quality else None,
                 "average_deep_sleep_minutes": round(avg_deep, 1) if avg_deep else None,
                 "average_rem_sleep_minutes": round(avg_rem, 1) if avg_rem else None,
-                "average_light_sleep_minutes": round(avg_light, 1)
-                if avg_light
-                else None,
+                "average_light_sleep_minutes": (
+                    round(avg_light, 1) if avg_light else None
+                ),
                 "total_records": len(sleep_records),
                 "date_range_days": date_range_days,
             },
@@ -434,9 +440,11 @@ class SleepDataService:
         # Sleep schedule consistency
         try:
             start_times = [
-                datetime.fromisoformat(record["sleep_start"]).time()
-                if isinstance(record["sleep_start"], str)
-                else record["sleep_start"].time()
+                (
+                    datetime.fromisoformat(record["sleep_start"]).time()
+                    if isinstance(record["sleep_start"], str)
+                    else record["sleep_start"].time()
+                )
                 for record in sorted_records
             ]
             start_time_minutes = [
@@ -471,56 +479,76 @@ class SleepDataService:
             duration_variability = None
 
         return {
-            "duration_trend": {
-                "direction": "increasing"
-                if duration_trend > 0.01
-                else "decreasing"
-                if duration_trend < -0.01
-                else "stable",
-                "strength": abs(duration_trend),
-                "average_change_per_day": duration_trend
-                * 60,  # Convert back to minutes
-            }
-            if duration_trend is not None
-            else None,
-            "quality_trend": {
-                "direction": "improving"
-                if quality_trend > 0.01
-                else "declining"
-                if quality_trend < -0.01
-                else "stable",
-                "strength": abs(quality_trend),
-                "average_change_per_day": quality_trend,
-            }
-            if quality_trend is not None
-            else None,
-            "schedule_consistency": {
-                "score": 100
-                - min(
-                    100, schedule_consistency
-                ),  # Convert to a 0-100 score where 100 is perfectly consistent
-                "rating": "excellent"
-                if schedule_consistency < 30
-                else "good"
-                if schedule_consistency < 60
-                else "fair"
-                if schedule_consistency < 90
-                else "poor",
-            }
-            if schedule_consistency is not None
-            else None,
-            "duration_variability": {
-                "score": 100 - min(100, duration_variability * 100),
-                "rating": "excellent"
-                if duration_variability < 0.1
-                else "good"
-                if duration_variability < 0.2
-                else "fair"
-                if duration_variability < 0.3
-                else "poor",
-            }
-            if duration_variability is not None
-            else None,
+            "duration_trend": (
+                {
+                    "direction": (
+                        "increasing"
+                        if duration_trend > 0.01
+                        else "decreasing"
+                        if duration_trend < -0.01
+                        else "stable"
+                    ),
+                    "strength": abs(duration_trend),
+                    "average_change_per_day": duration_trend
+                    * 60,  # Convert back to minutes
+                }
+                if duration_trend is not None
+                else None
+            ),
+            "quality_trend": (
+                {
+                    "direction": (
+                        "improving"
+                        if quality_trend > 0.01
+                        else "declining"
+                        if quality_trend < -0.01
+                        else "stable"
+                    ),
+                    "strength": abs(quality_trend),
+                    "average_change_per_day": quality_trend,
+                }
+                if quality_trend is not None
+                else None
+            ),
+            "schedule_consistency": (
+                {
+                    "score": 100
+                    - min(
+                        100, schedule_consistency
+                    ),  # Convert to a 0-100 score where 100 is perfectly consistent
+                    "rating": (
+                        "excellent"
+                        if schedule_consistency < 30
+                        else (
+                            "good"
+                            if schedule_consistency < 60
+                            else "fair"
+                            if schedule_consistency < 90
+                            else "poor"
+                        )
+                    ),
+                }
+                if schedule_consistency is not None
+                else None
+            ),
+            "duration_variability": (
+                {
+                    "score": 100 - min(100, duration_variability * 100),
+                    "rating": (
+                        "excellent"
+                        if duration_variability < 0.1
+                        else (
+                            "good"
+                            if duration_variability < 0.2
+                            else "fair"
+                            if duration_variability < 0.3
+                            else "poor"
+                        )
+                    ),
+                }
+                if duration_variability is not None
+                else None
+            ),
         }
 
     def _calculate_trend(self, values: List[float]) -> float:
@@ -540,6 +568,7 @@ class SleepDataService:
     def _calculate_consistency(self, time_minutes: List[int]) -> float:
         """
         Calculate consistency of times (in minutes past midnight).
+
         Lower values indicate more consistent times.
 
         Returns:

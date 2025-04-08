@@ -1,10 +1,11 @@
-"""Initial sleep data schema
+"""Initial sleep data schema.
 
 Revision ID: 001
 Revises:
 Create Date: 2025-04-08 10:00:00.000000
 
 """
+
 import sqlalchemy as sa
 from alembic import op
 from sqlalchemy.dialects.postgresql import JSON
@@ -17,6 +18,7 @@ depends_on = None
 
 
 def upgrade() -> None:
+    """Upgrade function for the sleep data schema."""
     # Create sleep_records table
     op.create_table(
         "sleep_records",
@@ -83,6 +85,7 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
+    """Downgrade function for the sleep data schema."""
     # Drop tables in reverse order
     op.drop_table("sleep_time_series")
     op.drop_table("sleep_records")

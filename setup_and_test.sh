@@ -27,11 +27,32 @@ fi
 
 # Fix CORS_ORIGINS format to be a proper JSON array
 echo "Fixing CORS_ORIGINS format in .env file..."
-sed -i '' 's|CORS_ORIGINS=http://localhost:3000,http://localhost:8000|CORS_ORIGINS=["http://localhost:3000", "http://localhost:8000"]|' .env
+# Use a more portable sed approach
+if [ -f ".env" ]; then
+    # GNU/Linux version
+    if sed --version 2>/dev/null | grep -q GNU; then
+        sed -i 's|CORS_ORIGINS=http://localhost:3000,http://localhost:8000|CORS_ORIGINS=["http://localhost:3000", "http://localhost:8000"]|' .env
+    # macOS version
+    else
+        sed -i '' 's|CORS_ORIGINS=http://localhost:3000,http://localhost:8000|CORS_ORIGINS=["http://localhost:3000", "http://localhost:8000"]|' .env
+    fi
+else
+    echo "Warning: .env file not found"
+fi
 
 # Override DATABASE_URL to use SQLite for testing
 echo "Setting DATABASE_URL to use SQLite..."
-sed -i '' 's|DATABASE_URL=postgresql://postgres:postgres@localhost:5432/sleep_data|DATABASE_URL=sqlite:///./data/test.db|' .env
+if [ -f ".env" ]; then
+    # GNU/Linux version
+    if sed --version 2>/dev/null | grep -q GNU; then
+        sed -i 's|DATABASE_URL=postgresql://postgres:postgres@localhost:5432/sleep_data|DATABASE_URL=sqlite:///./data/test.db|' .env
+    # macOS version
+    else
+        sed -i '' 's|DATABASE_URL=postgresql://postgres:postgres@localhost:5432/sleep_data|DATABASE_URL=sqlite:///./data/test.db|' .env
+    fi
+else
+    echo "Warning: .env file not found"
+fi
 
 # Create data directory if it doesn't exist
 mkdir -p data

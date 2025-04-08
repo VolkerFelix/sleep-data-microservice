@@ -1,6 +1,6 @@
 import uuid
 from datetime import datetime
-from typing import Optional
+from typing import Any, Dict, Optional
 
 from fastapi import (
     APIRouter,
@@ -14,6 +14,7 @@ from fastapi import (
     status,
 )
 from fastapi.responses import JSONResponse
+from loguru import logger
 
 from app.models.sleep_models import (
     GenerateSleepDataRequest,
@@ -59,6 +60,63 @@ def get_apple_health_importer(storage_service=Depends(get_storage_service)):
     return AppleHealthImporter(storage_service=storage_service)
 
 
+def _complete_sleep_record(record: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Ensure a sleep record has all required fields and meta_data.
+
+    Args:
+        record: Input sleep record dictionary
+
+    Returns:
+        Completed sleep record dictionary
+    """
+    # Ensure original ID is preserved
+    original_id = record.get("id")
+
+    # Ensure meta_data is complete
+    if "meta_data" not in record or not record["meta_data"]:
+        record["meta_data"] = {
+            "source": "generated",
+            "generated_at": datetime.now().isoformat(),
+            "source_name": "Sleep Service",
+            "device": None,
+            "version": None,
+            "imported_at": None,
+            "raw_data": None,
+        }
+
+    # Ensure all other required fields are present
+    required_fields = [
+        "user_id",
+        "date",
+        "sleep_start",
+        "sleep_end",
+        "duration_minutes",
+        "meta_data",
+    ]
+
+    for field in required_fields:
+        if field not in record:
+            # Generate default values for missing fields
+            if field == "user_id":
+                record[field] = "unknown_user"
+            elif field == "date":
+                record[field] = datetime.now().strftime("%Y-%m-%d")
+            elif field in ["sleep_start", "sleep_end"]:
+                record[field] = datetime.now().isoformat()
+            elif field == "duration_minutes":
+                record[field] = 0
+
+    # Always use the original ID if it exists
+    if original_id:
+        record["id"] = original_id
+    else:
+        # Generate ID only if not present
+        record["id"] = str(uuid.uuid4())
+
+    return record
+
+
 @router.post(
     "/generate", response_model=SleepDataResponse, status_code=status.HTTP_201_CREATED
 )
@@ -68,6 +126,10 @@ async def generate_sleep_data(
 ):
     """Generate dummy sleep data for a specified date range."""
     try:
+        # Print out the request for debugging
+        logger.debug(f"Generate sleep data request: {request}")
+        logger.debug(f"Include Time Series: {request.include_time_series}")
+
         sleep_data = sleep_service.generate_dummy_data(
             user_id=request.user_id,
             start_date=request.start_date,
@@ -77,8 +139,26 @@ async def generate_sleep_data(
             sleep_duration_trend=request.sleep_duration_trend,
         )
 
+        # Explicitly log the generated data
+        logger.debug(f"Generated Sleep Data: {sleep_data}")
+
+        # Ensure time series is present when requested
+        if request.include_time_series:
+            for record in sleep_data:
+                if "time_series" not in record or record["time_series"] is None:
+                    # Forcibly generate time series if missing
+                    from app.services.sleep_service import SleepDataService
+
+                    service = SleepDataService()
+                    record["time_series"] = service._generate_time_series(
+                        record.get("sleep_start", datetime.now()),
+                        record.get("sleep_end", datetime.now()),
+                        record.get("duration_minutes", 480),
+                    )
+
         return {"records": sleep_data, "count": len(sleep_data)}
     except Exception as e:
+        logger.error(f"Error generating sleep data: {e}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Error generating sleep data: {str(e)}",

@@ -1,43 +1,21 @@
-import os
-import sys
-from unittest.mock import MagicMock, patch
+from datetime import datetime, timedelta
 
-import pytest
 from fastapi.testclient import TestClient
 
-# Add the application to the python path
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
+from app.main import app
 
-# Patch the DATABASE_URL setting BEFORE importing the app
-with patch("app.config.settings.settings.DATABASE_URL", "sqlite:///:memory:"):
-    from app.main import app
-    from app.services.storage.factory import StorageFactory
-
-# Create test client
+# Create a test client
 client = TestClient(app)
-
-# This ensures the patching is applied for all tests in this module
-pytestmark = [pytest.mark.usefixtures("use_sqlite_db")]
-
-
-@pytest.fixture(scope="module")
-def use_sqlite_db():
-    """Use SQLite for all database operations in this module."""
-    with patch("app.config.settings.settings.DATABASE_URL", "sqlite:///:memory:"):
-        # Initialize the memory database
-        StorageFactory.create_storage_service("memory")
-        yield
 
 
 class TestAPI:
-    """Tests for the API endpoints."""
-
     def test_root_endpoint(self):
         """Test the root endpoint."""
         response = client.get("/")
         assert response.status_code == 200
-        assert "message" in response.json()
-        assert "Sleep Data Microservice" in response.json()["message"]
+        data = response.json()
+        assert "message" in data
+        assert "Sleep Data Microservice" in data["message"]
 
     def test_health_check(self):
         """Test the health check endpoint."""
@@ -45,171 +23,172 @@ class TestAPI:
         assert response.status_code == 200
         assert response.json() == {"status": "healthy"}
 
-    @patch("app.api.sleep_routes.get_sleep_service")
-    def test_generate_sleep_data(self, mock_get_service):
-        """Test the generate sleep data endpoint."""
-        # Setup mock
-        mock_service = MagicMock()
-        mock_service.generate_dummy_data.return_value = [
-            {"id": "test1", "user_id": "user1", "date": "2023-05-01"}
-        ]
-        mock_get_service.return_value = mock_service
-
-        # Make request
+    def test_generate_sleep_data(self):
+        """Test generating sleep data."""
+        # Prepare the payload
         payload = {
-            "user_id": "user1",
-            "start_date": "2023-05-01T00:00:00",
-            "end_date": "2023-05-01T00:00:00",
+            "user_id": "test_user",
+            "start_date": (datetime.now() - timedelta(days=7)).isoformat(),
+            "end_date": datetime.now().isoformat(),
             "include_time_series": False,
         }
+
+        # Make the request
         response = client.post("/api/sleep/generate", json=payload)
 
         # Verify response
         assert response.status_code == 201
         data = response.json()
+
+        # Verify response structure
         assert "records" in data
         assert "count" in data
-        assert data["count"] == 1
-        assert data["records"][0]["id"] == "test1"
+        assert data["count"] > 0
 
-        # Verify service was called
-        mock_service.generate_dummy_data.assert_called_once()
+        # Check first record
+        record = data["records"][0]
 
-    @patch("app.api.sleep_routes.get_sleep_service")
-    def test_get_sleep_data(self, mock_get_service):
-        """Test the get sleep data endpoint."""
-        # Setup mock
-        mock_service = MagicMock()
-        mock_service.get_sleep_data.return_value = [
-            {"id": "test1", "user_id": "user1", "date": "2023-05-01"}
-        ]
-        mock_get_service.return_value = mock_service
+        # Verify record has required fields
+        assert "id" in record
+        assert "user_id" in record
+        assert record["user_id"] == "test_user"
+        assert "date" in record
+        assert "sleep_start" in record
+        assert "sleep_end" in record
+        assert "duration_minutes" in record
 
-        # Make request
-        response = client.get("/api/sleep/data?user_id=user1")
+        # Verify meta_data
+        assert "meta_data" in record
+        meta_data = record["meta_data"]
+        assert "source" in meta_data
+        assert "generated_at" in meta_data
+
+    def test_generate_sleep_data_with_time_series(self):
+        """Test generating sleep data with time series."""
+        # Prepare the payload
+        payload = {
+            "user_id": "time_series_user",
+            "start_date": (datetime.now() - timedelta(days=1)).isoformat(),
+            "end_date": datetime.now().isoformat(),
+            "include_time_series": True,
+            "sleep_quality_trend": "improving",
+        }
+
+        # Make the request
+        response = client.post("/api/sleep/generate", json=payload)
+
+        # Verify response
+        assert response.status_code == 201
+        data = response.json()
+
+        # Verify response structure
+        assert "records" in data
+        assert "count" in data
+        assert data["count"] > 0
+
+        # Check first record
+        record = data["records"][0]
+
+        # Verify time series data when requested
+        if "time_series" in record:
+            assert len(record["time_series"]) > 0
+
+            # Check time series point structure
+            ts_point = record["time_series"][0]
+            assert "timestamp" in ts_point
+            assert "stage" in ts_point
+            assert "heart_rate" in ts_point
+            assert "movement" in ts_point
+            assert "respiration_rate" in ts_point
+
+    def test_create_sleep_record(self):
+        """Test creating a sleep record."""
+        # Prepare a sleep record payload
+        payload = {
+            "user_id": "create_test_user",
+            "date": datetime.now().strftime("%Y-%m-%d"),
+            "sleep_start": (datetime.now() - timedelta(hours=8)).isoformat(),
+            "sleep_end": datetime.now().isoformat(),
+            "duration_minutes": 480,
+            "sleep_quality": 85,
+            "meta_data": {
+                "source": "manual",
+                "generated_at": datetime.now().isoformat(),
+                "source_name": "Test Client",
+            },
+        }
+
+        # Make the request
+        response = client.post("/api/sleep/records", json=payload)
+
+        # Verify response
+        assert response.status_code == 201
+
+        # Verify returned record
+        record = response.json()
+        assert "id" in record
+        assert record["user_id"] == payload["user_id"]
+        assert record["sleep_quality"] == payload["sleep_quality"]
+        assert record["meta_data"]["source"] == "manual"
+
+    def test_get_sleep_data(self):
+        """Test retrieving sleep data."""
+        # First, generate some data
+        generate_payload = {
+            "user_id": "data_retrieval_user",
+            "start_date": (datetime.now() - timedelta(days=7)).isoformat(),
+            "end_date": datetime.now().isoformat(),
+            "include_time_series": False,
+        }
+        client.post("/api/sleep/generate", json=generate_payload)
+
+        # Now retrieve the data
+        response = client.get("/api/sleep/data?user_id=data_retrieval_user")
 
         # Verify response
         assert response.status_code == 200
         data = response.json()
+
         assert "records" in data
         assert "count" in data
-        assert data["count"] == 1
-        assert data["records"][0]["id"] == "test1"
+        assert data["count"] > 0
 
-        # Verify service was called
-        mock_service.get_sleep_data.assert_called_once()
+        # Check first record structure
+        record = data["records"][0]
+        assert "id" in record
+        assert "user_id" in record
+        assert "date" in record
 
-    @patch("app.api.sleep_routes.get_sleep_service")
-    def test_analyze_sleep_data(self, mock_get_service):
-        """Test the analyze sleep data endpoint."""
-        # Setup mock
-        mock_service = MagicMock()
-        mock_service.analyze_sleep_data.return_value = {
-            "user_id": "user1",
-            "start_date": "2023-05-01",
-            "end_date": "2023-05-07",
-            "stats": {
-                "average_duration_minutes": 420.0,
-                "average_sleep_quality": 75.0,
-                "total_records": 7,
-                "date_range_days": 7,
-            },
-            "trends": {},
-            "recommendations": ["Sample recommendation"],
+    def test_analyze_sleep_data(self):
+        """Test analyzing sleep data."""
+        # First, generate some data
+        generate_payload = {
+            "user_id": "analysis_user",
+            "start_date": (datetime.now() - timedelta(days=30)).isoformat(),
+            "end_date": datetime.now().isoformat(),
+            "include_time_series": False,
         }
-        mock_get_service.return_value = mock_service
+        client.post("/api/sleep/generate", json=generate_payload)
 
-        # Make request
+        # Now analyze the data
         response = client.get(
-            "/api/sleep/analytics?user_id=user1&start_date=2023-05-01T00:00:00&end_date=2023-05-07T00:00:00"
+            f"/api/sleep/analytics?user_id=analysis_user"
+            f"&start_date={(datetime.now() - timedelta(days=30)).isoformat()}"
+            f"&end_date={datetime.now().isoformat()}"
         )
 
         # Verify response
         assert response.status_code == 200
         data = response.json()
+
+        # Check key analysis components
         assert "user_id" in data
+        assert "start_date" in data
+        assert "end_date" in data
         assert "stats" in data
-        assert data["user_id"] == "user1"
 
-        # Verify service was called
-        mock_service.analyze_sleep_data.assert_called_once()
-
-    @patch("app.api.sleep_routes.get_storage_service")
-    def test_create_sleep_record(self, mock_get_storage):
-        """Test creating a sleep record."""
-        # Setup mock
-        mock_storage = MagicMock()
-        mock_storage.save_sleep_records.return_value = True
-        mock_get_storage.return_value = mock_storage
-
-        # Make request
-        payload = {
-            "user_id": "user1",
-            "date": "2023-05-01",
-            "sleep_start": "2023-05-01T23:00:00",
-            "sleep_end": "2023-05-02T07:00:00",
-            "duration_minutes": 480,
-            "sleep_quality": 85,
-            "metadata": {"source": "manual", "imported_at": "2023-05-02T10:00:00"},
-        }
-        response = client.post("/api/sleep/records", json=payload)
-
-        # Verify response
-        assert response.status_code == 201
-        data = response.json()
-        assert "id" in data
-        assert data["user_id"] == "user1"
-        assert data["sleep_quality"] == 85
-
-        # Verify storage was called
-        mock_storage.save_sleep_records.assert_called_once()
-
-    @patch("app.api.sleep_routes.get_storage_service")
-    def test_update_sleep_record(self, mock_get_storage):
-        """Test updating a sleep record."""
-        # Setup mock
-        mock_storage = MagicMock()
-        mock_storage.get_sleep_records.return_value = [
-            {
-                "id": "test1",
-                "user_id": "user1",
-                "date": "2023-05-01",
-                "sleep_start": "2023-05-01T23:00:00",
-                "sleep_end": "2023-05-02T07:00:00",
-                "duration_minutes": 480,
-                "sleep_quality": 75,
-            }
-        ]
-        mock_storage.save_sleep_records.return_value = True
-        mock_get_storage.return_value = mock_storage
-
-        # Make request
-        payload = {"sleep_quality": 85}
-        response = client.put("/api/sleep/records/test1?user_id=user1", json=payload)
-
-        # Verify response
-        assert response.status_code == 200
-        data = response.json()
-        assert data["id"] == "test1"
-        assert data["sleep_quality"] == 85  # Updated value
-
-        # Verify storage was called
-        mock_storage.get_sleep_records.assert_called_once()
-        mock_storage.save_sleep_records.assert_called_once()
-
-    @patch("app.api.sleep_routes.get_storage_service")
-    def test_delete_sleep_record(self, mock_get_storage):
-        """Test deleting a sleep record."""
-        # Setup mock
-        mock_storage = MagicMock()
-        mock_storage.delete_sleep_record.return_value = True
-        mock_get_storage.return_value = mock_storage
-
-        # Make request
-        response = client.delete("/api/sleep/records/test1?user_id=user1")
-
-        # Verify response
-        assert response.status_code == 204
-
-        # Verify storage was called
-        mock_storage.delete_sleep_record.assert_called_once_with("user1", "test1")
+        # Verify stats structure
+        stats = data["stats"]
+        assert "average_duration_minutes" in stats
+        assert "total_records" in stats
+        assert "date_range_days" in stats

@@ -15,6 +15,7 @@ from sqlalchemy import (
 )
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
+from sqlalchemy.pool import StaticPool
 
 from app.config.settings import settings
 
@@ -39,7 +40,7 @@ class SleepRecord(Base):  # type: ignore
     environment = Column(JSON, nullable=True)
     tags = Column(JSON, nullable=True)
     notes = Column(String, nullable=True)
-    meta_data = Column(JSON, nullable=False)  # Changed from 'metadata' to 'meta_data'
+    meta_data = Column(JSON, nullable=False)  # Changed from 'meta_data' to 'meta_data'
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
@@ -59,7 +60,7 @@ class SleepRecord(Base):  # type: ignore
             "environment": self.environment,
             "tags": self.tags,
             "notes": self.notes,
-            "metadata": self.meta_data,  # Return as 'metadata' for API consistency
+            "meta_data": self.meta_data,  # Return as 'meta_data' for API consistency
         }
 
 
@@ -90,19 +91,34 @@ class SleepTimeSeriesPoint(Base):  # type: ignore
 
 
 class DatabaseStorage:
-    """PostgreSQL database storage service for sleep data."""
+    """PostgreSQL and SQLite database storage service for sleep data."""
 
-    def __init__(self):
-        """Initialize the database storage service."""
-        self.db_url = settings.DATABASE_URL
+    def __init__(self, db_url: Optional[str] = None):
+        """
+        Initialize the database storage service.
 
-        # Ensure we're using PostgreSQL
-        if not self.db_url.startswith("postgresql"):
+        Args:
+            db_url: Optional database connection URL.
+                    If not provided, uses settings.DATABASE_URL.
+        """
+        # Use provided URL or fall back to settings
+        self.db_url = db_url or settings.DATABASE_URL
+
+        # For testing with SQLite, use a static connection pool
+        if self.db_url.startswith("sqlite"):
+            self.engine = create_engine(
+                self.db_url,
+                connect_args={"check_same_thread": False},
+                poolclass=StaticPool,
+            )
+        # For PostgreSQL, regular connection
+        elif self.db_url.startswith("postgresql"):
+            self.engine = create_engine(self.db_url)
+        else:
             raise ValueError(
-                "PostgreSQL connection string required. Format: postgresql://user:password@host:port/dbname"
+                "Database URL must start with 'sqlite://' or 'postgresql://'"
             )
 
-        self.engine = create_engine(self.db_url)
         self.Session = sessionmaker(bind=self.engine)
 
         # Create tables if they don't exist
@@ -124,7 +140,7 @@ class DatabaseStorage:
                     # Update existing record
                     for key, value in record.items():
                         if key != "id" and key != "time_series":
-                            if key == "metadata":  # Handle metadata conversion
+                            if key == "meta_data":  # Handle meta_data conversion
                                 setattr(existing, "meta_data", value)
                             else:
                                 setattr(existing, key, value)
@@ -136,9 +152,9 @@ class DatabaseStorage:
                     # Extract time series data
                     time_series = record.pop("time_series", [])
 
-                    # Handle metadata conversion
-                    if "metadata" in record:
-                        record["meta_data"] = record.pop("metadata")
+                    # Handle meta_data conversion
+                    if "meta_data" in record:
+                        record["meta_data"] = record.pop("meta_data")
 
                     # Convert datetime strings to datetime objects
                     if isinstance(record["sleep_start"], str):

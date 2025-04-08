@@ -43,7 +43,7 @@ class TestFileStorage:
             "sleep_start": "2023-05-20T23:00:00",
             "sleep_end": "2023-05-21T07:00:00",
             "duration_minutes": 480,
-            "metadata": {"source": "test"},
+            "meta_data": {"source": "test"},
             "time_series": [
                 {
                     "timestamp": "2023-05-20T23:30:00",
@@ -81,7 +81,7 @@ class TestFileStorage:
                 "sleep_start": f"2023-05-{20-i}T23:00:00",
                 "sleep_end": f"2023-05-{21-i}T07:00:00",
                 "duration_minutes": 480,
-                "metadata": {"source": "test"},
+                "meta_data": {"source": "test"},
             }
             for i in range(10)  # Create 10 records
         ]
@@ -127,7 +127,7 @@ class TestFileStorage:
                 "sleep_start": f"2023-05-{i+1:02d}T23:00:00",
                 "sleep_end": f"2023-05-{i+2:02d}T07:00:00",
                 "duration_minutes": 480,
-                "metadata": {"source": "test"},
+                "meta_data": {"source": "test"},
             }
             for i in range(20)
         ]

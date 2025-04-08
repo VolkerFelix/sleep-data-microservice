@@ -32,33 +32,10 @@ class StorageFactory:
             return DatabaseStorage()
         elif storage_type == "file":
             # Create FileStorage with a default data directory
-            from app.services.storage.file_storage import FileStorage
-
             return FileStorage(data_dir="./data")
         elif storage_type == "memory":
-            # Use an in-memory SQLite database
-            from app.services.storage.db_storage import DatabaseStorage
-
-            # Create a storage with in-memory SQLite
-            storage = DatabaseStorage()
-            storage.db_url = "sqlite:///:memory:"
-            # Configure for SQLite
-            from sqlalchemy import create_engine
-            from sqlalchemy.orm import sessionmaker
-            from sqlalchemy.pool import StaticPool
-
-            storage.engine = create_engine(
-                storage.db_url,
-                connect_args={"check_same_thread": False},
-                poolclass=StaticPool,
-            )
-            storage.Session = sessionmaker(bind=storage.engine)
-            # Create tables
-            from app.services.storage.db_storage import Base
-
-            Base.metadata.create_all(storage.engine)
-            return storage
+            # Create a DatabaseStorage with SQLite in-memory database
+            return DatabaseStorage(db_url="sqlite:///:memory:")
 
         # Add other storage types as needed
-
         return None

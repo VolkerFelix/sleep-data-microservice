@@ -88,7 +88,7 @@ def sample_sleep_record():
         "sleep_quality": 85,
         "heart_rate": {"average": 60.5, "min": 55.0, "max": 75.0},
         "breathing": {"average_rate": 14.2, "disruptions": 0},
-        "metadata": {"source": "test", "generated_at": "2023-05-16T09:00:00"},
+        "meta_data": {"source": "test", "generated_at": "2023-05-16T09:00:00"},
     }
 
 

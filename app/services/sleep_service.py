@@ -1,7 +1,7 @@
 import random
 import uuid
 from datetime import datetime, timedelta
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Union
 
 from loguru import logger
 
@@ -54,13 +54,9 @@ class SleepDataService:
             # Apply trends if specified
             if sleep_quality_trend:
                 if sleep_quality_trend == "improving":
-                    quality_modifier = (
-                        progress_factor * 15
-                    )  # Improve by up to 15 points
+                    quality_modifier = progress_factor * 15
                 elif sleep_quality_trend == "declining":
-                    quality_modifier = (
-                        -progress_factor * 15
-                    )  # Decline by up to 15 points
+                    quality_modifier = -progress_factor * 15
                 elif sleep_quality_trend == "stable":
                     quality_modifier = 0
                 else:  # random
@@ -70,11 +66,9 @@ class SleepDataService:
 
             if sleep_duration_trend:
                 if sleep_duration_trend == "increasing":
-                    duration_modifier = progress_factor * 2  # Increase by up to 2 hours
+                    duration_modifier = progress_factor * 2
                 elif sleep_duration_trend == "decreasing":
-                    duration_modifier = (
-                        -progress_factor * 2
-                    )  # Decrease by up to 2 hours
+                    duration_modifier = -progress_factor * 2
                 elif sleep_duration_trend == "stable":
                     duration_modifier = 0
                 else:  # random
@@ -107,149 +101,29 @@ class SleepDataService:
             quality_with_noise = max(40, min(98, quality_base + random.uniform(-5, 5)))
             sleep_quality = int(quality_with_noise)
 
-            # Sleep phases vary based on quality
-            quality_factor = sleep_quality / 100.0
-            deep_sleep_percentage = 0.15 + (quality_factor * 0.15)  # 15-30%
-            rem_sleep_percentage = 0.15 + (quality_factor * 0.20)  # 15-35%
-
-            # Ensure percentages don't exceed 100%
-            total_percentage = deep_sleep_percentage + rem_sleep_percentage
-            if total_percentage > 0.8:  # Cap at 80% to leave room for light sleep
-                scale_factor = 0.8 / total_percentage
-                deep_sleep_percentage *= scale_factor
-                rem_sleep_percentage *= scale_factor
-
-            1 - deep_sleep_percentage - rem_sleep_percentage
-
-            # Calculate durations for each sleep phase
-            total_minutes = sleep_duration_hours * 60
-            deep_sleep_minutes = int(total_minutes * deep_sleep_percentage)
-            rem_sleep_minutes = int(total_minutes * rem_sleep_percentage)
-            light_sleep_minutes = int(
-                total_minutes - deep_sleep_minutes - rem_sleep_minutes
-            )
-
-            # Generate heart rate data that correlates with sleep quality
-            # Higher quality sleep tends to have lower and more stable heart rates
-            avg_heart_rate = 70 - (quality_factor * 15) + random.uniform(-3, 3)
-            min_heart_rate = (
-                avg_heart_rate - (5 + (quality_factor * 10)) + random.uniform(-2, 2)
-            )
-            max_heart_rate = (
-                avg_heart_rate + (15 - (quality_factor * 5)) + random.uniform(-2, 2)
-            )
-
-            sleep_record = {
+            # Prepare record
+            record = {
                 "id": str(uuid.uuid4()),
                 "user_id": user_id,
                 "date": current_date.strftime("%Y-%m-%d"),
                 "sleep_start": sleep_start.isoformat(),
                 "sleep_end": sleep_end.isoformat(),
-                "duration_minutes": int(total_minutes),
-                "sleep_phases": {
-                    "deep_sleep_minutes": deep_sleep_minutes,
-                    "rem_sleep_minutes": rem_sleep_minutes,
-                    "light_sleep_minutes": light_sleep_minutes,
-                    "awake_minutes": int(random.uniform(5, 20)),
-                },
+                "duration_minutes": int(sleep_duration_hours * 60),
                 "sleep_quality": sleep_quality,
-                "heart_rate": {
-                    "average": round(avg_heart_rate, 1),
-                    "min": round(min_heart_rate, 1),
-                    "max": round(max_heart_rate, 1),
-                },
-                "breathing": {
-                    "average_rate": round(12 + random.uniform(-2, 2), 1),
-                    "disruptions": int(random.uniform(0, 5) * (1 - quality_factor)),
-                },
-                "tags": [],
-                "metadata": {
+                "meta_data": {
                     "source": "generated",
                     "generated_at": datetime.now().isoformat(),
+                    "source_name": "Sleep Service",
                 },
             }
 
-            # Add environmental data occasionally
-            if random.random() > 0.3:
-                sleep_record["environment"] = {
-                    "temperature": round(20 + random.uniform(-3, 3), 1),
-                    "humidity": round(50 + random.uniform(-15, 15), 1),
-                    "noise_level": round(20 + random.uniform(0, 15), 1),
-                    "light_level": round(random.uniform(0, 5), 1),
-                }
-
-            # Generate time series data if requested
+            # Optionally generate time series data
             if include_time_series:
-                time_series = []
-                current_time = sleep_start
-                interval_minutes = 10  # Data points every 10 minutes
+                record["time_series"] = self._generate_time_series(
+                    sleep_start, sleep_end, int(sleep_duration_hours * 60)
+                )
 
-                # Determine sleep stage transitions based on
-                # normal sleep cycle patterns
-                # Typical sleep cycle: light → deep → light → REM,
-                # repeating every ~90 minutes
-                cycle_minutes = 90
-
-                while current_time < sleep_end:
-                    # Calculate minutes into sleep and position in the sleep cycle
-                    minutes_into_sleep = (
-                        current_time - sleep_start
-                    ).total_seconds() / 60
-                    cycle_position = (
-                        minutes_into_sleep % cycle_minutes
-                    ) / cycle_minutes
-
-                    # Determine sleep stage based on cycle position
-                    if cycle_position < 0.1:  # First ~9 minutes typically light sleep
-                        stage = SleepStage.LIGHT
-                    elif cycle_position < 0.4:  # Next ~27 minutes typically deep sleep
-                        stage = SleepStage.DEEP
-                    elif cycle_position < 0.7:  # Next ~27 minutes back to light sleep
-                        stage = SleepStage.LIGHT
-                    else:  # Last ~27 minutes typically REM sleep
-                        stage = SleepStage.REM
-
-                    # Briefly awake occasionally
-                    if random.random() < 0.03:  # 3% chance of being briefly awake
-                        stage = SleepStage.AWAKE
-
-                    # Heart rate varies by sleep stage
-                    if stage == SleepStage.DEEP:
-                        hr = min_heart_rate + random.uniform(0, 5)
-                    elif stage == SleepStage.REM:
-                        hr = avg_heart_rate + random.uniform(-5, 10)
-                    elif stage == SleepStage.LIGHT:
-                        hr = avg_heart_rate + random.uniform(-7, 3)
-                    else:  # AWAKE
-                        hr = avg_heart_rate + random.uniform(5, 15)
-
-                    # Movement varies by sleep stage
-                    if stage == SleepStage.DEEP:
-                        movement = random.uniform(0, 0.1)
-                    elif stage == SleepStage.REM:
-                        movement = random.uniform(0.1, 0.5)
-                    elif stage == SleepStage.LIGHT:
-                        movement = random.uniform(0.1, 0.3)
-                    else:  # AWAKE
-                        movement = random.uniform(0.5, 1.0)
-
-                    # Add time series entry
-                    time_series.append(
-                        {
-                            "timestamp": current_time.isoformat(),
-                            "stage": stage,
-                            "heart_rate": round(hr, 1),
-                            "movement": round(movement, 2),
-                            "respiration_rate": round(12 + random.uniform(-2, 2), 1),
-                        }
-                    )
-
-                    # Move to next time interval
-                    current_time += timedelta(minutes=interval_minutes)
-
-                sleep_record["time_series"] = time_series
-
-            sleep_data.append(sleep_record)
+            sleep_data.append(record)
             current_date += timedelta(days=1)
 
         # If storage service is available, store the generated records
@@ -260,6 +134,72 @@ class SleepDataService:
                 logger.error(f"Failed to store generated sleep records: {str(e)}")
 
         return sleep_data
+
+    def _generate_time_series(
+        self,
+        sleep_start: Union[datetime, str],
+        sleep_end: Union[datetime, str],
+        duration_minutes: int,
+    ) -> List[Dict[str, Any]]:
+        """
+        Generate time series data for a sleep record.
+
+        Args:
+            sleep_start: Start time of sleep
+            sleep_end: End time of sleep
+            duration_minutes: Total sleep duration
+
+        Returns:
+            List of time series data points
+        """
+        # Convert to datetime if strings
+        if isinstance(sleep_start, str):
+            sleep_start = datetime.fromisoformat(sleep_start)
+        if isinstance(sleep_end, str):
+            sleep_end = datetime.fromisoformat(sleep_end)
+
+        time_series = []
+        current_time = sleep_start
+        interval_minutes = 10  # Data points every 10 minutes
+
+        while current_time < sleep_end:
+            # Randomly select a sleep stage
+            stage = random.choice(list(SleepStage))
+
+            # Simulate heart rate variations based on sleep stage
+            if stage == SleepStage.DEEP:
+                heart_rate = random.uniform(50, 60)
+            elif stage == SleepStage.REM:
+                heart_rate = random.uniform(60, 70)
+            elif stage == SleepStage.LIGHT:
+                heart_rate = random.uniform(55, 65)
+            else:  # AWAKE
+                heart_rate = random.uniform(65, 75)
+
+            # Simulate movement based on sleep stage
+            if stage == SleepStage.DEEP:
+                movement = random.uniform(0, 0.1)
+            elif stage == SleepStage.REM:
+                movement = random.uniform(0.1, 0.5)
+            elif stage == SleepStage.LIGHT:
+                movement = random.uniform(0.1, 0.3)
+            else:  # AWAKE
+                movement = random.uniform(0.5, 1.0)
+
+            time_series.append(
+                {
+                    "timestamp": current_time.isoformat(),
+                    "stage": stage,
+                    "heart_rate": round(heart_rate, 1),
+                    "movement": round(movement, 2),
+                    "respiration_rate": round(random.uniform(12, 16), 1),
+                }
+            )
+
+            # Move to next time interval
+            current_time += timedelta(minutes=interval_minutes)
+
+        return time_series
 
     def get_sleep_data(
         self,

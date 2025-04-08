@@ -43,7 +43,7 @@ class TestSleepDataService:
             assert "sleep_phases" in record
             assert "sleep_quality" in record
             assert "heart_rate" in record
-            assert "metadata" in record
+            assert "meta_data" in record
 
     def test_generate_dummy_data_with_time_series(self):
         """Test generating dummy sleep data with time series data."""

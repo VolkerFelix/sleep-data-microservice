@@ -33,9 +33,7 @@ def upgrade() -> None:
         sa.Column("environment", JSON, nullable=True),
         sa.Column("tags", JSON, nullable=True),
         sa.Column("notes", sa.String(), nullable=True),
-        sa.Column(
-            "meta_data", JSON, nullable=False
-        ),  # Changed from 'metadata' to 'meta_data'
+        sa.Column("meta_data", JSON, nullable=False),
         sa.Column(
             "created_at", sa.DateTime(), server_default=sa.text("now()"), nullable=False
         ),

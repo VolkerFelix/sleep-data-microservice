@@ -205,7 +205,7 @@ class AppleHealthImporter:
                     ),
                 },
                 "time_series": [],
-                "metadata": {
+                "meta_data": {
                     "source": "apple_health",
                     "imported_at": datetime.now().isoformat(),
                     "source_name": ", ".join(entry["source_names"]),

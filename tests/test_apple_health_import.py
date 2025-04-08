@@ -71,12 +71,12 @@ class TestAppleHealthImporter:
         assert "duration_minutes" in record
         assert "sleep_phases" in record
         assert "time_series" in record
-        assert "metadata" in record
+        assert "meta_data" in record
 
-        # Verify metadata
-        assert record["metadata"]["source"] == "apple_health"
-        assert "imported_at" in record["metadata"]
-        assert "Sleep Cycle" in record["metadata"]["source_name"]
+        # Verify meta_data
+        assert record["meta_data"]["source"] == "apple_health"
+        assert "imported_at" in record["meta_data"]
+        assert "Sleep Cycle" in record["meta_data"]["source_name"]
 
     def test_extract_heart_rate_data(self):
         """Test extracting heart rate data from XML."""

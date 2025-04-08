@@ -20,9 +20,9 @@ if config.config_file_name is not None:
 database_url = os.getenv("DATABASE_URL", settings.DATABASE_URL)
 config.set_main_option("sqlalchemy.url", database_url)
 
-# add your model's MetaData object here
+# add your model's meta_data object here
 # for 'autogenerate' support
-target_metadata = Base.metadata
+target_meta_data = Base.meta_data
 
 # other values from the config, defined by the needs of env.py,
 # can be acquired:
@@ -45,7 +45,7 @@ def run_migrations_offline() -> None:
     url = config.get_main_option("sqlalchemy.url")
     context.configure(
         url=url,
-        target_metadata=target_metadata,
+        target_meta_data=target_meta_data,
         literal_binds=True,
         dialect_opts={"paramstyle": "named"},
     )
@@ -68,7 +68,7 @@ def run_migrations_online() -> None:
     )
 
     with connectable.connect() as connection:
-        context.configure(connection=connection, target_metadata=target_metadata)
+        context.configure(connection=connection, target_meta_data=target_meta_data)
 
         with context.begin_transaction():
             context.run_migrations()

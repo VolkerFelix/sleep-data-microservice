@@ -39,7 +39,7 @@ class SleepRecord(Base):  # type: ignore
     environment = Column(JSON, nullable=True)
     tags = Column(JSON, nullable=True)
     notes = Column(String, nullable=True)
-    metadata = Column(JSON, nullable=False)
+    meta_data = Column(JSON, nullable=False)  # Changed from 'metadata' to 'meta_data'
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
@@ -59,7 +59,7 @@ class SleepRecord(Base):  # type: ignore
             "environment": self.environment,
             "tags": self.tags,
             "notes": self.notes,
-            "metadata": self.metadata,
+            "metadata": self.meta_data,  # Return as 'metadata' for API consistency
         }
 
 
@@ -124,7 +124,10 @@ class DatabaseStorage:
                     # Update existing record
                     for key, value in record.items():
                         if key != "id" and key != "time_series":
-                            setattr(existing, key, value)
+                            if key == "metadata":  # Handle metadata conversion
+                                setattr(existing, "meta_data", value)
+                            else:
+                                setattr(existing, key, value)
                 else:
                     # Create new record
                     if "id" not in record:
@@ -132,6 +135,10 @@ class DatabaseStorage:
 
                     # Extract time series data
                     time_series = record.pop("time_series", [])
+
+                    # Handle metadata conversion
+                    if "metadata" in record:
+                        record["meta_data"] = record.pop("metadata")
 
                     # Convert datetime strings to datetime objects
                     if isinstance(record["sleep_start"], str):

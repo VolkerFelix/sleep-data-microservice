@@ -1,19 +1,23 @@
 import os
 import sys
-import pytest
-from fastapi.testclient import TestClient
 from unittest.mock import MagicMock
 
-# Add the application to the python path
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+import pytest
+from fastapi.testclient import TestClient
 
 from app.main import app
-from app.services.storage.factory import StorageFactory
+
+# ruff: noqa: E501
+
+# Add the application to the python path
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
+
 
 @pytest.fixture
 def client():
     """Create a test client for the FastAPI app."""
     return TestClient(app)
+
 
 @pytest.fixture
 def mock_storage():
@@ -24,6 +28,7 @@ def mock_storage():
     storage.save_sleep_records.return_value = True
     storage.delete_sleep_record.return_value = True
     return storage
+
 
 @pytest.fixture
 def sample_sleep_record():
@@ -39,23 +44,14 @@ def sample_sleep_record():
             "deep_sleep_minutes": 120,
             "rem_sleep_minutes": 100,
             "light_sleep_minutes": 240,
-            "awake_minutes": 20
+            "awake_minutes": 20,
         },
         "sleep_quality": 85,
-        "heart_rate": {
-            "average": 60.5,
-            "min": 55.0,
-            "max": 75.0
-        },
-        "breathing": {
-            "average_rate": 14.2,
-            "disruptions": 0
-        },
-        "metadata": {
-            "source": "test",
-            "generated_at": "2023-05-16T09:00:00"
-        }
+        "heart_rate": {"average": 60.5, "min": 55.0, "max": 75.0},
+        "breathing": {"average_rate": 14.2, "disruptions": 0},
+        "metadata": {"source": "test", "generated_at": "2023-05-16T09:00:00"},
     }
+
 
 @pytest.fixture
 def sample_apple_health_xml():

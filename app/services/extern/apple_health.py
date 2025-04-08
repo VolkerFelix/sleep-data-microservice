@@ -256,14 +256,33 @@ class AppleHealthImporter:
             return None
 
         try:
-            # Handle 'Z' timezone marker
-            if date_str.endswith("Z"):
-                date_str = date_str[:-1] + "+00:00"
-            # Add timezone if missing
-            elif not any(x in date_str for x in ["+", "-", "Z"]):
-                date_str = date_str + "+00:00"
+            # Handle Apple Health format (e.g., "2023-05-01 23:30:45 -0700")
+            # First try direct ISO format
+            try:
+                return datetime.fromisoformat(date_str)
+            except ValueError:
+                # If that fails, parse the Apple Health format
+                import re
 
-            return datetime.fromisoformat(date_str)
+                # Regular expression to match Apple Health date format
+                pattern = r"(\d{4}-\d{2}-\d{2}) (\d{2}:\d{2}:\d{2}) ([-+]\d{4})"
+                match = re.match(pattern, date_str)
+
+                if match:
+                    date_part, time_part, tz_part = match.groups()
+
+                    # Convert timezone offset to ISO format (e.g., -0700 to -07:00)
+                    tz_hours = tz_part[0:3]  # Include sign
+                    tz_minutes = tz_part[3:5]
+                    tz_iso = f"{tz_hours}:{tz_minutes}"
+
+                    # Combine into ISO format
+                    iso_datetime = f"{date_part}T{time_part}{tz_iso}"
+                    return datetime.fromisoformat(iso_datetime)
+
+                # If still no match, try other formats as needed
+                raise ValueError(f"Unrecognized date format: {date_str}")
+
         except (ValueError, TypeError) as e:
             logger.warning(f"Error parsing date string: {date_str} - {e}")
             return None

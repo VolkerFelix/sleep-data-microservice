@@ -26,30 +26,30 @@ from app.models.sleep_models import (
 )
 from app.services.extern.apple_health import AppleHealthImporter
 from app.services.sleep_service import SleepDataService
-from app.services.storage.factory import StorageFactory
 
 router = APIRouter(prefix="/sleep", tags=["sleep"])
 
 
 # Service dependencies
+# In app/api/sleep_routes.py
+
+
 def get_storage_service():
     """
     Get the appropriate storage service based on environment.
-
-    For testing, uses in-memory SQLite.
-    For production, uses PostgreSQL.
     """
-    # Import here to avoid circular imports
+    import os
 
     from app.config.settings import settings
 
-    # Check if we're in a testing environment
-    if settings.DATABASE_URL.startswith("sqlite"):
-        # We're using SQLite - likely a test environment
-        return StorageFactory.create_storage_service("memory")
-    else:
-        # We're in production
-        return StorageFactory.create_storage_service("database")
+    # Use the environment variable if available, otherwise use settings
+    db_url = os.environ.get("DATABASE_URL", settings.DATABASE_URL)
+    logger.debug(f"Creating storage service with DB URL: {db_url}")
+
+    # Create database storage with this URL
+    from app.services.storage.db_storage import DatabaseStorage
+
+    return DatabaseStorage(db_url=db_url)
 
 
 def get_sleep_service(storage_service=Depends(get_storage_service)):
@@ -355,3 +355,29 @@ async def delete_sleep_record(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Error deleting sleep record: {str(e)}",
         )
+
+
+@router.get("/debug")
+async def debug_storage(
+    user_id: str = Query(..., description="User ID to retrieve sleep data for"),
+    storage_service=Depends(get_storage_service),
+):
+    """Debug endpoint to directly check the storage service."""
+    try:
+        # Try to get records for this user
+        records = storage_service.get_sleep_records(user_id=user_id)
+
+        # Return diagnostic information
+        return {
+            "service_type": type(storage_service).__name__,
+            "db_url": getattr(storage_service, "db_url", "Unknown"),
+            "records_count": len(records),
+            "record_ids": [r.get("id") for r in records],
+            "success": True,
+        }
+    except Exception as e:
+        return {
+            "service_type": type(storage_service).__name__,
+            "error": str(e),
+            "success": False,
+        }

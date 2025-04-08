@@ -206,6 +206,8 @@ class DatabaseStorage:
         finally:
             session.close()
 
+    # Modified version of get_sleep_records in app/services/storage/db_storage.py
+
     def get_sleep_records(
         self,
         user_id: str,
@@ -217,28 +219,37 @@ class DatabaseStorage:
         """Get sleep records from the database."""
         session = self.Session()
         try:
+            # Log the query parameters
+            logger.debug(
+                f"""Getting records for user_id={user_id},
+                start_date={start_date}, end_date={end_date}"""
+            )
+
             query = session.query(SleepRecord).filter(SleepRecord.user_id == user_id)
+            logger.debug(f"Query after user_id filter: {query}")
 
             if start_date:
-                query = query.filter(
-                    SleepRecord.date >= start_date.strftime("%Y-%m-%d")
-                )
+                date_str = start_date.strftime("%Y-%m-%d")
+                logger.debug(f"Filtering by start_date: {date_str}")
+                query = query.filter(SleepRecord.date >= date_str)
 
             if end_date:
-                query = query.filter(SleepRecord.date <= end_date.strftime("%Y-%m-%d"))
+                date_str = end_date.strftime("%Y-%m-%d")
+                logger.debug(f"Filtering by end_date: {date_str}")
+                query = query.filter(SleepRecord.date <= date_str)
 
             # Sort by date (newest first)
             query = query.order_by(SleepRecord.date.desc())
 
             # Apply pagination
             records = query.limit(limit).offset(offset).all()
+            logger.debug(f"Found {len(records)} records in database")
 
             # Convert to dictionaries
             result = []
             for record in records:
                 record_dict = record.to_dict()
-
-                # Get time series data
+                # Add time series data if applicable
                 time_series_query = (
                     session.query(SleepTimeSeriesPoint)
                     .filter(SleepTimeSeriesPoint.sleep_record_id == record.id)
@@ -254,6 +265,10 @@ class DatabaseStorage:
 
         except Exception as e:
             logger.error(f"Error getting sleep records from database: {e}")
+            # Log more details about the exception
+            import traceback
+
+            logger.error(f"Traceback: {traceback.format_exc()}")
             return []
 
         finally:

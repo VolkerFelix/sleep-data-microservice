@@ -15,6 +15,8 @@ class SleepDataService:
         """Initialize the sleep data service with an optional storage service."""
         self.storage_service = storage_service
 
+    # In app/services/sleep_service.py, update the generate_dummy_data method:
+
     def generate_dummy_data(
         self,
         user_id: str,
@@ -101,6 +103,27 @@ class SleepDataService:
             quality_with_noise = max(40, min(98, quality_base + random.uniform(-5, 5)))
             sleep_quality = int(quality_with_noise)
 
+            # Calculate duration in minutes
+            duration_minutes = int(sleep_duration_hours * 60)
+
+            # Generate sleep phases
+            deep_sleep_pct = random.uniform(0.15, 0.25)  # 15-25% deep sleep
+            rem_sleep_pct = random.uniform(0.20, 0.30)  # 20-30% REM sleep
+            light_sleep_pct = (
+                1 - deep_sleep_pct - rem_sleep_pct
+            )  # Remaining is light sleep
+
+            # Calculate minutes in each phase
+            deep_sleep_minutes = int(duration_minutes * deep_sleep_pct)
+            rem_sleep_minutes = int(duration_minutes * rem_sleep_pct)
+            light_sleep_minutes = int(duration_minutes * light_sleep_pct)
+            awake_minutes = (
+                duration_minutes
+                - deep_sleep_minutes
+                - rem_sleep_minutes
+                - light_sleep_minutes
+            )
+
             # Prepare record
             record = {
                 "id": str(uuid.uuid4()),
@@ -108,8 +131,19 @@ class SleepDataService:
                 "date": current_date.strftime("%Y-%m-%d"),
                 "sleep_start": sleep_start.isoformat(),
                 "sleep_end": sleep_end.isoformat(),
-                "duration_minutes": int(sleep_duration_hours * 60),
+                "duration_minutes": duration_minutes,
                 "sleep_quality": sleep_quality,
+                "sleep_phases": {
+                    "deep_sleep_minutes": deep_sleep_minutes,
+                    "rem_sleep_minutes": rem_sleep_minutes,
+                    "light_sleep_minutes": light_sleep_minutes,
+                    "awake_minutes": awake_minutes if awake_minutes >= 0 else 0,
+                },
+                "heart_rate": {
+                    "average": round(random.uniform(55, 65), 1),
+                    "min": round(random.uniform(45, 55), 1),
+                    "max": round(random.uniform(65, 85), 1),
+                },
                 "meta_data": {
                     "source": "generated",
                     "generated_at": datetime.now().isoformat(),
@@ -120,7 +154,7 @@ class SleepDataService:
             # Optionally generate time series data
             if include_time_series:
                 record["time_series"] = self._generate_time_series(
-                    sleep_start, sleep_end, int(sleep_duration_hours * 60)
+                    sleep_start, sleep_end, duration_minutes
                 )
 
             sleep_data.append(record)
@@ -282,18 +316,31 @@ class SleepDataService:
             sum(quality_scores) / len(quality_scores) if quality_scores else None
         )
 
+        # Add default values for sleep phases if they're missing
         deep_sleep_mins = []
         rem_sleep_mins = []
         light_sleep_mins = []
 
         for record in sleep_records:
-            if "sleep_phases" in record:
+            if "sleep_phases" in record and record["sleep_phases"]:
                 phases = record["sleep_phases"]
-                if "deep_sleep_minutes" in phases:
+                if (
+                    phases
+                    and "deep_sleep_minutes" in phases
+                    and phases["deep_sleep_minutes"] is not None
+                ):
                     deep_sleep_mins.append(phases["deep_sleep_minutes"])
-                if "rem_sleep_minutes" in phases:
+                if (
+                    phases
+                    and "rem_sleep_minutes" in phases
+                    and phases["rem_sleep_minutes"] is not None
+                ):
                     rem_sleep_mins.append(phases["rem_sleep_minutes"])
-                if "light_sleep_minutes" in phases:
+                if (
+                    phases
+                    and "light_sleep_minutes" in phases
+                    and phases["light_sleep_minutes"] is not None
+                ):
                     light_sleep_mins.append(phases["light_sleep_minutes"])
 
         avg_deep = (
@@ -307,8 +354,14 @@ class SleepDataService:
         # Calculate date range in days
         date_range_days = (end_date - start_date).days + 1
 
-        # Calculate trends
-        trends = self.calculate_sleep_trends(sleep_records)
+        # Calculate trends - wrap this in try-except to handle potential errors
+        try:
+            trends = self.calculate_sleep_trends(sleep_records)
+        except Exception as e:
+            import logging
+
+            logging.error(f"Error calculating trends: {str(e)}")
+            trends = {"note": "Error calculating trends", "error": str(e)}
 
         return {
             "user_id": user_id,
@@ -326,6 +379,11 @@ class SleepDataService:
                 "date_range_days": date_range_days,
             },
             "trends": trends,
+            "recommendations": [
+                "Maintain a consistent sleep schedule",
+                "Ensure your bedroom is dark and quiet",
+                "Avoid caffeine and large meals before bedtime",
+            ],
         }
 
     def calculate_sleep_trends(self, sleep_records: List[Dict]) -> Dict[str, Any]:
@@ -339,46 +397,78 @@ class SleepDataService:
             Dictionary with trend analysis
         """
         if not sleep_records:
-            return {}
+            return {
+                "note": "Insufficient data to calculate trends",
+                "duration_trend": None,
+                "quality_trend": None,
+                "schedule_consistency": None,
+                "duration_variability": None,
+            }
 
         # Sort records by date
         sorted_records = sorted(sleep_records, key=lambda x: x["date"])
 
         # Extract data for trend analysis
-        [record["date"] for record in sorted_records]
         durations = [record["duration_minutes"] for record in sorted_records]
         qualities = [record.get("sleep_quality", None) for record in sorted_records]
         qualities = [q for q in qualities if q is not None]  # Remove None values
+
+        # Calculate trends only if we have enough data points
+        if len(durations) < 2:
+            return {
+                "note": "Need at least two data points to calculate trends",
+                "duration_trend": None,
+                "quality_trend": None,
+                "schedule_consistency": None,
+                "duration_variability": None,
+            }
 
         # Simple linear trend calculation for duration
         duration_trend = self._calculate_trend(durations)
 
         # Simple linear trend calculation for quality if available
-        quality_trend = self._calculate_trend(qualities) if qualities else None
+        quality_trend = (
+            self._calculate_trend(qualities) if len(qualities) >= 2 else None
+        )
 
         # Sleep schedule consistency
-        start_times = [
-            datetime.fromisoformat(record["sleep_start"]).time()
-            for record in sorted_records
-        ]
-        start_time_minutes = [
-            (t.hour * 60 + t.minute) % (24 * 60) for t in start_times
-        ]  # Convert to minutes past midnight
-        schedule_consistency = self._calculate_consistency(start_time_minutes)
+        try:
+            start_times = [
+                datetime.fromisoformat(record["sleep_start"]).time()
+                if isinstance(record["sleep_start"], str)
+                else record["sleep_start"].time()
+                for record in sorted_records
+            ]
+            start_time_minutes = [
+                (t.hour * 60 + t.minute) % (24 * 60) for t in start_times
+            ]  # Convert to minutes past midnight
+            schedule_consistency = self._calculate_consistency(start_time_minutes)
+        except Exception as e:
+            import logging
+
+            logging.error(f"Error calculating schedule consistency: {str(e)}")
+            schedule_consistency = None
 
         # Day-to-day variability in duration
-        if len(durations) > 1:
-            duration_differences = [
-                abs(durations[i] - durations[i + 1]) for i in range(len(durations) - 1)
-            ]
-            avg_duration_difference = sum(duration_differences) / len(
-                duration_differences
-            )
-            duration_variability = avg_duration_difference / (
-                sum(durations) / len(durations)
-            )  # Normalized
-        else:
-            duration_variability = 0
+        try:
+            if len(durations) > 1:
+                duration_differences = [
+                    abs(durations[i] - durations[i + 1])
+                    for i in range(len(durations) - 1)
+                ]
+                avg_duration_difference = sum(duration_differences) / len(
+                    duration_differences
+                )
+                duration_variability = avg_duration_difference / (
+                    sum(durations) / len(durations)
+                )  # Normalized
+            else:
+                duration_variability = 0
+        except Exception as e:
+            import logging
+
+            logging.error(f"Error calculating duration variability: {str(e)}")
+            duration_variability = None
 
         return {
             "duration_trend": {
@@ -390,7 +480,9 @@ class SleepDataService:
                 "strength": abs(duration_trend),
                 "average_change_per_day": duration_trend
                 * 60,  # Convert back to minutes
-            },
+            }
+            if duration_trend is not None
+            else None,
             "quality_trend": {
                 "direction": "improving"
                 if quality_trend > 0.01
@@ -414,7 +506,9 @@ class SleepDataService:
                 else "fair"
                 if schedule_consistency < 90
                 else "poor",
-            },
+            }
+            if schedule_consistency is not None
+            else None,
             "duration_variability": {
                 "score": 100 - min(100, duration_variability * 100),
                 "rating": "excellent"
@@ -424,7 +518,9 @@ class SleepDataService:
                 else "fair"
                 if duration_variability < 0.3
                 else "poor",
-            },
+            }
+            if duration_variability is not None
+            else None,
         }
 
     def _calculate_trend(self, values: List[float]) -> float:

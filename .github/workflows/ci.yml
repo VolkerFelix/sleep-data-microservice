@@ -1,0 +1,86 @@
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: [3.9]
+
+    steps:
+    - uses: actions/checkout@v3
+
+    - name: Set up Python ${{ matrix.python-version }}
+      uses: actions/setup-python@v4
+      with:
+        python-version: ${{ matrix.python-version }}
+        cache: 'pip'
+
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install pytest pytest-cov
+        if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
+
+    - name: Run tests with pytest
+      run: |
+        pytest --cov=app tests/
+
+    - name: Upload coverage report
+      uses: codecov/codecov-action@v3
+      with:
+        file: ./coverage.xml
+        fail_ci_if_error: false
+
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v3
+
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: 3.9
+        cache: 'pip'
+
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install flake8 black isort
+        
+    - name: Lint with flake8
+      run: |
+        flake8 app tests --count --select=E9,F63,F7,F82 --show-source --statistics
+        flake8 app tests --count --exit-zero --max-complexity=10 --max-line-length=127 --statistics
+
+    - name: Check formatting with black
+      run: |
+        black --check app tests
+
+    - name: Check imports with isort
+      run: |
+        isort --check-only --profile black app tests
+
+  build:
+    needs: [test, lint]
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v3
+    
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v2
+    
+    - name: Build Docker image
+      uses: docker/build-push-action@v4
+      with:
+        context: .
+        push: false
+        tags: sleep-data-microservice:${{ github.sha }}
+        cache-from: type=gha
+        cache-to: type=gha,mode=max

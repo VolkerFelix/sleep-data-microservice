@@ -86,6 +86,7 @@ Once the service is running, API documentation is available at:
 | POST | `/api/sleep/records` | Create a new sleep record |
 | PUT | `/api/sleep/records/{record_id}` | Update a sleep record |
 | DELETE | `/api/sleep/records/{record_id}` | Delete a sleep record |
+| GET | `/api/sleep/users` | List all users with their record counts |
 | POST | `/api/sleep/import/apple_health` | Import sleep data from Apple Health |
 | POST | `/api/sleep/generate` | Generate synthetic sleep data |
 | GET | `/api/sleep/analytics` | Analyze sleep patterns and trends |

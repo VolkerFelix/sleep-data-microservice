@@ -132,7 +132,7 @@ class SleepDataService:
 
             # Prepare record
             record = {
-                "id": str(uuid.uuid4()),
+                "record_id": str(uuid.uuid4()),
                 "user_id": user_id,
                 "date": current_date.strftime("%Y-%m-%d"),
                 "sleep_start": sleep_start.isoformat(),
@@ -147,8 +147,8 @@ class SleepDataService:
                 },
                 "heart_rate": {
                     "average": round(random.uniform(55, 65), 1),
-                    "min": round(random.uniform(45, 55), 1),
-                    "max": round(random.uniform(65, 85), 1),
+                    "minimum": round(random.uniform(45, 55), 1),
+                    "maximum": round(random.uniform(65, 85), 1),
                 },
                 "meta_data": {
                     "source": "generated",

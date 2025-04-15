@@ -1,3 +1,5 @@
+"""This module contains the routes for the sleep data API."""
+
 import uuid
 from datetime import datetime
 from typing import Any, Dict, Optional
@@ -23,6 +25,7 @@ from app.models.sleep_models import (
     SleepRecord,
     SleepRecordCreate,
     SleepRecordUpdate,
+    UsersResponse,
 )
 from app.services.extern.apple_health import AppleHealthImporter
 from app.services.sleep_service import SleepDataService
@@ -30,14 +33,8 @@ from app.services.sleep_service import SleepDataService
 router = APIRouter(prefix="/sleep", tags=["sleep"])
 
 
-# Service dependencies
-# In app/api/sleep_routes.py
-
-
 def get_storage_service():
-    """
-    Get the appropriate storage service based on environment.
-    """
+    """Get the appropriate storage service based on environment."""
     import os
 
     from app.config.settings import settings
@@ -53,10 +50,12 @@ def get_storage_service():
 
 
 def get_sleep_service(storage_service=Depends(get_storage_service)):
+    """Get the sleep data service."""
     return SleepDataService(storage_service=storage_service)
 
 
 def get_apple_health_importer(storage_service=Depends(get_storage_service)):
+    """Get the Apple Health importer."""
     return AppleHealthImporter(storage_service=storage_service)
 
 
@@ -109,10 +108,10 @@ def _complete_sleep_record(record: Dict[str, Any]) -> Dict[str, Any]:
 
     # Always use the original ID if it exists
     if original_id:
-        record["id"] = original_id
+        record["record_id"] = original_id
     else:
         # Generate ID only if not present
-        record["id"] = str(uuid.uuid4())
+        record["record_id"] = str(uuid.uuid4())
 
     return record
 
@@ -267,7 +266,7 @@ async def create_sleep_record(
     try:
         # Convert to dict and add ID
         record_dict = record.dict()
-        record_dict["id"] = str(uuid.uuid4())
+        record_dict["record_id"] = str(uuid.uuid4())
 
         # Save to storage
         success = storage_service.save_sleep_records(record.user_id, [record_dict])
@@ -298,7 +297,9 @@ async def update_sleep_record(
         # Get existing record
         records = storage_service.get_sleep_records(user_id=user_id, limit=1, offset=0)
 
-        existing_record = next((r for r in records if r.get("id") == record_id), None)
+        existing_record = next(
+            (r for r in records if r.get("record_id") == record_id), None
+        )
 
         if not existing_record:
             raise HTTPException(
@@ -372,7 +373,7 @@ async def debug_storage(
             "service_type": type(storage_service).__name__,
             "db_url": getattr(storage_service, "db_url", "Unknown"),
             "records_count": len(records),
-            "record_ids": [r.get("id") for r in records],
+            "record_ids": [r.get("record_id") for r in records],
             "success": True,
         }
     except Exception as e:
@@ -381,3 +382,34 @@ async def debug_storage(
             "error": str(e),
             "success": False,
         }
+
+
+@router.get("/users", response_model=UsersResponse)
+async def get_users(
+    limit: int = Query(100, description="Maximum number of users to return"),
+    offset: int = Query(0, description="Number of users to skip"),
+    storage_service=Depends(get_storage_service),
+):
+    """Get a list of unique users with their record counts."""
+    try:
+        users = storage_service.get_users(limit=limit, offset=offset)
+
+        # Add metadata about the latest sleep record date for each user
+        for user in users:
+            user_id = user["user_id"]
+            # Get the most recent record for this user
+            recent_records = storage_service.get_sleep_records(
+                user_id=user_id, limit=1, offset=0
+            )
+            if recent_records:
+                user["latest_record_date"] = recent_records[0].get("date")
+            else:
+                user["latest_record_date"] = None
+
+        return {"users": users, "count": len(users)}
+
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error retrieving users: {str(e)}",
+        )

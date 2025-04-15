@@ -1,3 +1,5 @@
+"""Test the API endpoints."""
+
 import os
 import uuid
 from datetime import datetime, timedelta
@@ -16,6 +18,8 @@ client = TestClient(app)
 
 @pytest.mark.usefixtures("use_sqlite_db")
 class TestAPI:
+    """Test the API endpoints."""
+
     def test_database_storage_directly(self):
         """Test the database storage directly to troubleshoot retrieval issues."""
         import uuid
@@ -343,3 +347,114 @@ class TestAPI:
         assert response.status_code == 200
         data = response.json()
         assert data["count"] > 0, "No records in API response"
+
+    def test_get_users_endpoint(self):
+        """Test the /api/sleep/users endpoint for retrieving users."""
+        # First, generate data for a few test users with unique IDs
+        test_users = [f"test_user_{uuid.uuid4()}" for _ in range(3)]
+
+        for user_id in test_users:
+            # Generate data for each user
+            payload = {
+                "user_id": user_id,
+                "start_date": (datetime.now() - timedelta(days=7)).isoformat(),
+                "end_date": datetime.now().isoformat(),
+                "include_time_series": False,
+            }
+
+            # Make the request to generate data
+            response = client.post("/api/sleep/generate", json=payload)
+            assert response.status_code == 201, f"Failed to generate data for {user_id}"
+
+        # Now retrieve the users
+        response = client.get("/api/sleep/users")
+
+        # Verify the response
+        assert response.status_code == 200
+        data = response.json()
+
+        # Check the response structure
+        assert "users" in data
+        assert "count" in data
+        assert isinstance(data["users"], list)
+        assert data["count"] > 0
+
+        # Verify all our test users are in the response
+        user_ids_in_response = [user["user_id"] for user in data["users"]]
+        for user_id in test_users:
+            assert (
+                user_id in user_ids_in_response
+            ), f"User {user_id} not found in response"
+
+        # Check that each user has the expected fields
+        for user in data["users"]:
+            assert "user_id" in user
+            assert "record_count" in user
+            assert "latest_record_date" in user
+            assert isinstance(user["record_count"], int)
+            assert user["record_count"] > 0
+            assert isinstance(user["latest_record_date"], str)
+
+    def test_get_users_pagination(self):
+        """Test pagination for the /api/sleep/users endpoint."""
+        # Generate at least 5 users to test pagination
+        test_users = [f"pagination_user_{uuid.uuid4()}" for _ in range(5)]
+
+        for user_id in test_users:
+            # Generate data for each user
+            payload = {
+                "user_id": user_id,
+                "start_date": (datetime.now() - timedelta(days=7)).isoformat(),
+                "end_date": datetime.now().isoformat(),
+                "include_time_series": False,
+            }
+            client.post("/api/sleep/generate", json=payload)
+
+        # Test with limit parameter
+        limit = 2
+        response = client.get(f"/api/sleep/users?limit={limit}")
+
+        assert response.status_code == 200
+        data = response.json()
+
+        # Should return only the requested number of users
+        assert len(data["users"]) <= limit
+
+        # Test with offset parameter
+        offset = 2
+        response = client.get(f"/api/sleep/users?offset={offset}")
+
+        assert response.status_code == 200
+        data_with_offset = response.json()
+
+        # Get all users to compare
+        response_all = client.get("/api/sleep/users")
+        all_users = response_all.json()["users"]
+
+        # Check if offset is working correctly
+        if len(all_users) > offset:
+            assert (
+                data_with_offset["users"][0]["user_id"] == all_users[offset]["user_id"]
+            )
+
+    def test_get_users_empty_database(self):
+        """Test the /api/sleep/users endpoint with no users in the database."""
+        # Create a unique user ID that definitely won't be in the database
+        unique_user_id = f"nonexistent_user_{uuid.uuid4()}"
+
+        # Make a request to get a specific, nonexistent user to ensure it doesn't exist
+        response = client.get(f"/api/sleep/data?user_id={unique_user_id}")
+        records = response.json().get("records", [])
+        assert len(records) == 0, "Test requires empty database but found records"
+
+        # Now query the users endpoint with a filter that won't match anything
+        response = client.get(
+            "/api/sleep/users?limit=100&offset=10000"
+        )  # Very high offset
+
+        # Verify the response - should be an empty list but still a successful response
+        assert response.status_code == 200
+        data = response.json()
+
+        assert data["users"] == []
+        assert data["count"] == 0

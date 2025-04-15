@@ -1,9 +1,11 @@
+"""File-based storage service for sleep data."""
+
 import errno
 import json
 import os
 import uuid
 from datetime import datetime
-from typing import Dict, List, Optional
+from typing import Any, Dict, List, Optional
 
 from loguru import logger
 
@@ -203,3 +205,52 @@ class FileStorage:
         except Exception as e:
             logger.error(f"Unexpected error deleting record {record_id}: {e}")
             return False
+
+    def get_users(self, limit: int = 100, offset: int = 0) -> List[Dict[str, Any]]:
+        """
+        Get a list of unique users in the file storage with record counts.
+
+        Args:
+            limit: Maximum number of users to return
+            offset: Number of users to skip
+
+        Returns:
+            List of dictionaries containing user_id and record_count
+        """
+        try:
+            # Get all subdirectories in the base path (each subdirectory is a user)
+            user_dirs = [
+                d
+                for d in os.listdir(self.base_path)
+                if os.path.isdir(os.path.join(self.base_path, d))
+            ]
+
+            # Calculate record counts for each user
+            user_records = []
+            for user_id in user_dirs:
+                user_dir = os.path.join(self.base_path, user_id)
+                # Count .json files that are not in the time_series directory
+                record_files = [
+                    f
+                    for f in os.listdir(user_dir)
+                    if f.endswith(".json") and not f.startswith("time_series")
+                ]
+
+                user_records.append(
+                    {"user_id": user_id, "record_count": len(record_files)}
+                )
+
+            # Sort by record count (descending)
+            user_records.sort(
+                key=lambda x: x["record_count"], reverse=True  # type: ignore
+            )
+
+            # Apply pagination
+            return user_records[offset : offset + limit]
+
+        except FileNotFoundError:
+            logger.warning(f"Base directory {self.base_path} not found")
+            return []
+        except Exception as e:
+            logger.error(f"Unexpected error retrieving users: {e}")
+            return []

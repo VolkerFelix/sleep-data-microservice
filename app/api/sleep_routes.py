@@ -1,3 +1,5 @@
+"""This module contains the routes for the sleep data API."""
+
 import uuid
 from datetime import datetime
 from typing import Any, Dict, Optional
@@ -23,6 +25,7 @@ from app.models.sleep_models import (
     SleepRecord,
     SleepRecordCreate,
     SleepRecordUpdate,
+    UsersResponse,
 )
 from app.services.extern.apple_health import AppleHealthImporter
 from app.services.sleep_service import SleepDataService
@@ -30,14 +33,8 @@ from app.services.sleep_service import SleepDataService
 router = APIRouter(prefix="/sleep", tags=["sleep"])
 
 
-# Service dependencies
-# In app/api/sleep_routes.py
-
-
 def get_storage_service():
-    """
-    Get the appropriate storage service based on environment.
-    """
+    """Get the appropriate storage service based on environment."""
     import os
 
     from app.config.settings import settings
@@ -53,10 +50,12 @@ def get_storage_service():
 
 
 def get_sleep_service(storage_service=Depends(get_storage_service)):
+    """Get the sleep data service."""
     return SleepDataService(storage_service=storage_service)
 
 
 def get_apple_health_importer(storage_service=Depends(get_storage_service)):
+    """Get the Apple Health importer."""
     return AppleHealthImporter(storage_service=storage_service)
 
 
@@ -381,3 +380,34 @@ async def debug_storage(
             "error": str(e),
             "success": False,
         }
+
+
+@router.get("/users", response_model=UsersResponse)
+async def get_users(
+    limit: int = Query(100, description="Maximum number of users to return"),
+    offset: int = Query(0, description="Number of users to skip"),
+    storage_service=Depends(get_storage_service),
+):
+    """Get a list of unique users with their record counts."""
+    try:
+        users = storage_service.get_users(limit=limit, offset=offset)
+
+        # Add metadata about the latest sleep record date for each user
+        for user in users:
+            user_id = user["user_id"]
+            # Get the most recent record for this user
+            recent_records = storage_service.get_sleep_records(
+                user_id=user_id, limit=1, offset=0
+            )
+            if recent_records:
+                user["latest_record_date"] = recent_records[0].get("date")
+            else:
+                user["latest_record_date"] = None
+
+        return {"users": users, "count": len(users)}
+
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error retrieving users: {str(e)}",
+        )

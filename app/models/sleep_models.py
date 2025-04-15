@@ -1,3 +1,4 @@
+"""Models for the sleep data microservice."""
 from datetime import datetime
 from enum import Enum
 from typing import Any, Dict, List, Optional, Union
@@ -29,8 +30,8 @@ class HeartRateData(BaseModel):
     """Model for heart rate data during sleep."""
 
     average: float = Field(..., description="Average heart rate during sleep")
-    min: float = Field(..., description="Minimum heart rate during sleep")
-    max: float = Field(..., description="Maximum heart rate during sleep")
+    minimum: float = Field(..., description="Minimum heart rate during sleep")
+    maximum: float = Field(..., description="Maximum heart rate during sleep")
     resting: Optional[float] = Field(None, description="Resting heart rate")
 
 
@@ -98,7 +99,7 @@ class SleepTimeSeries(BaseModel):
 class SleepRecord(BaseModel):
     """Model for a sleep record."""
 
-    id: str = Field(..., description="Unique identifier for the sleep record")
+    record_id: str = Field(..., description="Unique identifier for the sleep record")
     user_id: str = Field(..., description="User identifier")
     date: str = Field(..., description="Date of the sleep record (YYYY-MM-DD)")
     sleep_start: datetime = Field(..., description="Start time of sleep")
@@ -300,3 +301,20 @@ class SleepTrendsResponse(BaseModel):
     trends: List[SleepTrend] = Field(..., description="List of identified trends")
     start_date: str = Field(..., description="Start date of analysis")
     end_date: str = Field(..., description="End date of analysis")
+
+
+class UserInfo(BaseModel):
+    """Model for user information."""
+
+    user_id: str = Field(..., description="User identifier")
+    record_count: int = Field(..., description="Number of sleep records for this user")
+    latest_record_date: Optional[str] = Field(
+        None, description="Date of the latest sleep record"
+    )
+
+
+class UsersResponse(BaseModel):
+    """Response model for users list."""
+
+    users: List[UserInfo] = Field(..., description="List of users")
+    count: int = Field(..., description="Total number of users returned")

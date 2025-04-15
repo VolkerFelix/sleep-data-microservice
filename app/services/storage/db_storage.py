@@ -1,6 +1,8 @@
+"""Database storage service for sleep data."""
+
 import uuid
 from datetime import datetime
-from typing import Dict, List, Optional
+from typing import Any, Dict, List, Optional
 
 from loguru import logger
 from sqlalchemy import (
@@ -12,6 +14,8 @@ from sqlalchemy import (
     Integer,
     String,
     create_engine,
+    desc,
+    func,
 )
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
@@ -27,7 +31,7 @@ class SleepRecord(Base):  # type: ignore
 
     __tablename__ = "sleep_records"
 
-    id = Column(String, primary_key=True)
+    record_id = Column(String, primary_key=True)
     user_id = Column(String, index=True, nullable=False)
     date = Column(String, index=True, nullable=False)
     sleep_start = Column(DateTime, nullable=False)
@@ -47,7 +51,7 @@ class SleepRecord(Base):  # type: ignore
     def to_dict(self) -> Dict:
         """Convert the record to a dictionary."""
         return {
-            "id": self.id,
+            "id": self.record_id,
             "user_id": self.user_id,
             "date": self.date,
             "sleep_start": self.sleep_start.isoformat(),
@@ -69,9 +73,9 @@ class SleepTimeSeriesPoint(Base):  # type: ignore
 
     __tablename__ = "sleep_time_series"
 
-    id = Column(String, primary_key=True)
+    point_id = Column(String, primary_key=True)
     sleep_record_id = Column(
-        String, ForeignKey("sleep_records.id", ondelete="CASCADE"), index=True
+        String, ForeignKey("sleep_records.record_id", ondelete="CASCADE"), index=True
     )
     timestamp = Column(DateTime, nullable=False)
     stage = Column(String, nullable=True)
@@ -132,7 +136,7 @@ class DatabaseStorage:
                 # Check if record already exists
                 existing = (
                     session.query(SleepRecord)
-                    .filter(SleepRecord.id == record.get("id"))
+                    .filter(SleepRecord.record_id == record.get("id"))
                     .first()
                 )
 
@@ -185,7 +189,7 @@ class DatabaseStorage:
                             timestamp = ts_point["timestamp"]
 
                         time_series_record = SleepTimeSeriesPoint(
-                            id=ts_point_id,
+                            point_id=ts_point_id,
                             sleep_record_id=record["id"],
                             timestamp=timestamp,
                             stage=ts_point.get("stage"),
@@ -252,7 +256,7 @@ class DatabaseStorage:
                 # Add time series data if applicable
                 time_series_query = (
                     session.query(SleepTimeSeriesPoint)
-                    .filter(SleepTimeSeriesPoint.sleep_record_id == record.id)
+                    .filter(SleepTimeSeriesPoint.sleep_record_id == record.record_id)
                     .order_by(SleepTimeSeriesPoint.timestamp)
                 )
 
@@ -281,7 +285,9 @@ class DatabaseStorage:
             # First check if the record exists and belongs to the user
             record = (
                 session.query(SleepRecord)
-                .filter(SleepRecord.id == record_id, SleepRecord.user_id == user_id)
+                .filter(
+                    SleepRecord.record_id == record_id, SleepRecord.user_id == user_id
+                )
                 .first()
             )
 
@@ -298,6 +304,50 @@ class DatabaseStorage:
             session.rollback()
             logger.error(f"Error deleting sleep record from database: {e}")
             return False
+
+        finally:
+            session.close()
+
+    def get_users(self, limit: int = 100, offset: int = 0) -> List[Dict[str, Any]]:
+        """
+        Get a list of unique users in the database with record counts.
+
+        Args:
+            limit: Maximum number of users to return
+            offset: Number of users to skip
+
+        Returns:
+            List of dictionaries containing user_id and record_count
+        """
+        session = self.Session()
+        try:
+            # Query to get unique user_ids and count of records for each
+            query = (
+                session.query(
+                    SleepRecord.user_id,
+                    func.count(SleepRecord.record_id).label("record_count"),
+                )
+                .group_by(SleepRecord.user_id)
+                .order_by(desc("record_count"))
+                .limit(limit)
+                .offset(offset)
+            )
+
+            # Execute query and format results
+            result = [
+                {"user_id": user_id, "record_count": record_count}
+                for user_id, record_count in query.all()
+            ]
+
+            return result
+
+        except Exception as e:
+            logger.error(f"Error getting users from database: {e}")
+            # Log more details about the exception
+            import traceback
+
+            logger.error(f"Traceback: {traceback.format_exc()}")
+            return []
 
         finally:
             session.close()

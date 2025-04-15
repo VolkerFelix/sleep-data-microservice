@@ -108,10 +108,10 @@ def _complete_sleep_record(record: Dict[str, Any]) -> Dict[str, Any]:
 
     # Always use the original ID if it exists
     if original_id:
-        record["id"] = original_id
+        record["record_id"] = original_id
     else:
         # Generate ID only if not present
-        record["id"] = str(uuid.uuid4())
+        record["record_id"] = str(uuid.uuid4())
 
     return record
 
@@ -266,7 +266,7 @@ async def create_sleep_record(
     try:
         # Convert to dict and add ID
         record_dict = record.dict()
-        record_dict["id"] = str(uuid.uuid4())
+        record_dict["record_id"] = str(uuid.uuid4())
 
         # Save to storage
         success = storage_service.save_sleep_records(record.user_id, [record_dict])
@@ -297,7 +297,9 @@ async def update_sleep_record(
         # Get existing record
         records = storage_service.get_sleep_records(user_id=user_id, limit=1, offset=0)
 
-        existing_record = next((r for r in records if r.get("id") == record_id), None)
+        existing_record = next(
+            (r for r in records if r.get("record_id") == record_id), None
+        )
 
         if not existing_record:
             raise HTTPException(
@@ -371,7 +373,7 @@ async def debug_storage(
             "service_type": type(storage_service).__name__,
             "db_url": getattr(storage_service, "db_url", "Unknown"),
             "records_count": len(records),
-            "record_ids": [r.get("id") for r in records],
+            "record_ids": [r.get("record_id") for r in records],
             "success": True,
         }
     except Exception as e:

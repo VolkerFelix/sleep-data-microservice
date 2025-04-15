@@ -74,21 +74,23 @@ class FileStorage:
 
         for record in records:
             # Ensure each record has a unique ID
-            if "id" not in record:
-                record["id"] = str(uuid.uuid4())
+            if "record_id" not in record:
+                record["record_id"] = str(uuid.uuid4())
 
             # Separate time series data
             time_series = record.pop("time_series", [])
 
             # Save main record
-            record_file = os.path.join(user_dir, f"{record['id']}.json")
+            record_file = os.path.join(user_dir, f"{record['record_id']}.json")
             success &= self._save_file(record_file, record)
 
             # Save time series data if present
             if time_series:
                 ts_dir = os.path.join(user_dir, "time_series")
                 os.makedirs(ts_dir, exist_ok=True)
-                ts_path = os.path.join(ts_dir, f"{record['id']}_time_series.json")
+                ts_path = os.path.join(
+                    ts_dir, f"{record['record_id']}_time_series.json"
+                )
                 success &= self._save_file(ts_path, {"time_series": time_series})
 
         return success
@@ -135,7 +137,7 @@ class FileStorage:
 
                     # Try to load time series data
                     ts_dir = os.path.join(user_dir, "time_series")
-                    ts_filename = f"{record['id']}_time_series.json"
+                    ts_filename = f"{record['record_id']}_time_series.json"
                     ts_path = os.path.join(ts_dir, ts_filename)
                     if os.path.exists(ts_path):
                         with open(ts_path, "r") as f:

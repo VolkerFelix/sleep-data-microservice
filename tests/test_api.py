@@ -36,7 +36,7 @@ class TestAPI:
 
         # Create a test sleep record
         test_record = {
-            "id": test_record_id,
+            "record_id": test_record_id,
             "user_id": test_user_id,
             "date": datetime.now().strftime("%Y-%m-%d"),
             "sleep_start": datetime.now().isoformat(),
@@ -65,7 +65,7 @@ class TestAPI:
         # Verify record was saved and retrieved correctly
         assert len(retrieved_records) > 0, "No records retrieved directly from database"
         assert (
-            retrieved_records[0]["id"] == test_record_id
+            retrieved_records[0]["record_id"] == test_record_id
         ), "Retrieved record ID doesn't match test record ID"
 
     def test_storage_service_save_function(self):
@@ -79,7 +79,7 @@ class TestAPI:
         # Create a test record
         test_user_id = f"storage_service_test_{uuid.uuid4()}"
         test_record = {
-            "id": str(uuid.uuid4()),
+            "record_id": str(uuid.uuid4()),
             "user_id": test_user_id,
             "date": datetime.now().strftime("%Y-%m-%d"),
             "sleep_start": datetime.now().isoformat(),
@@ -152,7 +152,7 @@ class TestAPI:
         record = data["records"][0]
 
         # Verify record has required fields
-        assert "id" in record
+        assert "record_id" in record
         assert "user_id" in record
         assert record["user_id"] == "test_user"
         assert "date" in record
@@ -241,7 +241,7 @@ class TestAPI:
 
         # Verify returned record
         record = response.json()
-        assert "id" in record
+        assert "record_id" in record
         assert record["user_id"] == payload["user_id"]
         assert record["sleep_quality"] == payload["sleep_quality"]
         assert record["meta_data"]["source"] == "manual"

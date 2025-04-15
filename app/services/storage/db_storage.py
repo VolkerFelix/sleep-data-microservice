@@ -51,7 +51,7 @@ class SleepRecord(Base):  # type: ignore
     def to_dict(self) -> Dict:
         """Convert the record to a dictionary."""
         return {
-            "id": self.record_id,
+            "record_id": self.record_id,
             "user_id": self.user_id,
             "date": self.date,
             "sleep_start": self.sleep_start.isoformat(),
@@ -136,22 +136,22 @@ class DatabaseStorage:
                 # Check if record already exists
                 existing = (
                     session.query(SleepRecord)
-                    .filter(SleepRecord.record_id == record.get("id"))
+                    .filter(SleepRecord.record_id == record.get("record_id"))
                     .first()
                 )
 
                 if existing:
                     # Update existing record
                     for key, value in record.items():
-                        if key != "id" and key != "time_series":
+                        if key != "record_id" and key != "time_series":
                             if key == "meta_data":  # Handle meta_data conversion
                                 setattr(existing, "meta_data", value)
                             else:
                                 setattr(existing, key, value)
                 else:
                     # Create new record
-                    if "id" not in record:
-                        record["id"] = str(uuid.uuid4())
+                    if "record_id" not in record:
+                        record["record_id"] = str(uuid.uuid4())
 
                     # Extract time series data
                     time_series = record.pop("time_series", [])
@@ -190,7 +190,7 @@ class DatabaseStorage:
 
                         time_series_record = SleepTimeSeriesPoint(
                             point_id=ts_point_id,
-                            sleep_record_id=record["id"],
+                            sleep_record_id=record["record_id"],
                             timestamp=timestamp,
                             stage=ts_point.get("stage"),
                             heart_rate=ts_point.get("heart_rate"),
